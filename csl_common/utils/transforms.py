@@ -544,7 +544,6 @@ class RandomAffine(object):
         t = skimage.transform.AffineTransform(translation=-np.array(img_size[::-1])/2)
         return skimage.transform.AffineTransform(matrix=t._inv_matrix.dot(M.params.dot(t.params)))
 
-
     def __call__(self, sample):
         if isinstance(sample, dict):
             img, landmarks, pose = sample['image'], sample['landmarks'], sample['pose']
@@ -570,23 +569,22 @@ class RandomAffine(object):
         else:
             assert isinstance(img_size, (tuple, list)) and len(img_size) == 2, \
                 "img_size should be a list or tuple and it must be of length 2."
-        return self.get_params(self.degrees, self.translate, self.scale, self.shear, img_size, self.keep_aspect)
+        return self.get_params(img_size)
 
     def __repr__(self):
-        s = '{name}(degrees={degrees}'
+        s = f'{self.__class__.__name__}(degrees={self.angle_range}'
         if self.translate is not None:
-            s += ', translate={translate}'
-        if self.scale is not None:
-            s += ', scale={scale}'
-        if self.shear is not None:
-            s += ', shear={shear}'
+            s += f', translate={self.translate}'
+        if self.scale_range is not None:
+            s += f', scale={self.scale_range}'
+        if self.shear_range is not None:
+            s += f', shear={self.shear_range}'
         if self.resample > 0:
-            s += ', resample={resample}'
+            s += f', resample={self.resample}'
         if self.fillcolor != 0:
-            s += ', fillcolor={fillcolor}'
+            s += f', fillcolor={self.fillcolor}'
         s += ')'
-        d = dict(self.__dict__)
-        return s.format(name=self.__class__.__name__, **d)
+        return s
 
 
 class RandomLowQuality(object):

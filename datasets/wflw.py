@@ -2,7 +2,6 @@ import os
 import numpy as np
 import torch.utils.data as td
 import pandas as pd
-from csl_common.vis import vis
 from datasets.facedataset import FaceDataset
 
 SUBSETS = ['pose', 'illumination', 'expression', 'make-up', 'occlusion', 'blur']
@@ -86,14 +85,18 @@ class WFLW(FaceDataset):
 if __name__ == '__main__':
     from csl_common.utils.nn import Batch
     from csl_common.utils.common import init_random
+    from csl_common.utils.ds_utils import build_transform
+    from csl_common.vis import vis
     import config
 
     init_random(3)
 
     dir = config.get_dataset_paths('wflw')[0]
-    ds = WFLW(root=dir, train=True, deterministic=True, use_cache=True, daug=0, image_size=256)
+    ds = WFLW(root=dir, train=True, deterministic=True, use_cache=True, daug=0, image_size=256,
+              transform=build_transform(deterministic=False, daug=4))
     # ds.filter_labels({'pose':0, 'blur':0, 'occlusion':1})
     dl = td.DataLoader(ds, batch_size=1, shuffle=False, num_workers=0)
+    print(ds)
 
     for data in dl:
         batch = Batch(data, gpu=False)

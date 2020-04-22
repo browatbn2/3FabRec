@@ -413,8 +413,8 @@ class AAETraining(object):
             disp_images = vis.add_error_to_images(disp_images, errors=1-err_gan_inputs, loc=loc_err_gan,
                                                   format_string='{:>5.2f}', vmax=1.0)
 
-        disp_images = vis.add_landmarks_to_images(disp_images, batch.landmarks[:nimgs], color=(0,1,0), radius=1,
-                                                  draw_wireframe=False)
+        # disp_images = vis.add_landmarks_to_images(disp_images, batch.landmarks[:nimgs], color=(0,1,0), radius=1,
+        #                                           draw_wireframe=False)
         rows = [vis.make_grid(disp_images, nCols=nimgs, normalize=False)]
 
         recon_images = vis.to_disp_images(X_recon[:nimgs], denorm=True)
@@ -430,8 +430,8 @@ class AAETraining(object):
         #                                            format_string='({:>3.2f})', vmin=0.2, vmax=0.8)
 
         X_recon_errs = 255.0 * torch.abs(batch.images - X_recon).reshape(len(batch.images), -1).mean(dim=1)
-        disp_X_recon = vis.add_landmarks_to_images(disp_X_recon, batch.landmarks[:nimgs], radius=1, color=None,
-                                                   lm_errs=lm_ssim_errs, draw_wireframe=False)
+        # disp_X_recon = vis.add_landmarks_to_images(disp_X_recon, batch.landmarks[:nimgs], radius=1, color=None,
+        #                                            lm_errs=lm_ssim_errs, draw_wireframe=False)
         disp_X_recon = vis.add_error_to_images(disp_X_recon[:nimgs], errors=X_recon_errs, size=text_size_errors, format_string='{:>4.1f}')
         if self.args.with_gan:
             with torch.no_grad():
@@ -555,10 +555,6 @@ def add_arguments(parser, defaults=None):
     parser.add_argument('--batchsize-eval', default=None, type=int, metavar='N', help='batch size for evaluation')
 
     # data
-    # parser.add_argument('--root', default=cfg.DATASET_ROOT, type=str, metavar='PATH',
-    #                     help='path to directory where datasets are located')
-    # parser.add_argument('--cache-root', default=cfg.DATASET_ROOT_LOCAL, type=str, metavar='PATH',
-    #                     help='path to directory that will be used to store cached data (e.g. crops)')
     parser.add_argument('--use-cache', type=bool_str, default=True, help='use cached crops')
     parser.add_argument('--train-count', default=None, type=int, help='number of training images per dataset')
     parser.add_argument('--train-count-multi', default=None, type=int,

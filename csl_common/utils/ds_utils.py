@@ -98,7 +98,7 @@ def read_openface_detection(lmFilepath, numpy_lmFilepath=None, from_sequence=Fal
     return result
 
 
-def build_transform(deterministic, color, daug=0):
+def build_transform(deterministic, color=True, daug=0):
     transforms = []
     if not deterministic:
         transforms = [csl_tf.RandomHorizontalFlip(0.5)]

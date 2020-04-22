@@ -7,7 +7,6 @@ from csl_common.utils.nn import Batch
 from datasets import facedataset
 
 
-
 def read_300W_detection(lmFilepath):
     lms = []
     with open(lmFilepath) as f:

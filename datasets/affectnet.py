@@ -1,17 +1,15 @@
 import os
-import cv2
 import numpy as np
 
 import torch.utils.data as td
 import pandas as pd
 
-from constants import *
 from csl_common.utils import ds_utils
 from csl_common.utils.nn import to_numpy, Batch
 from datasets import facedataset
 
 CLASS_NAMES = ['Neutral', 'Happy', 'Sad', 'Surprise', 'Fear', 'Disgust', 'Anger', 'Contempt']
-MAX_IMAGES_PER_EXPRESSION = 1000000
+MAX_IMAGES_PER_EXPRESSION = None
 
 
 class AffectNet(facedataset.FaceDataset):
@@ -20,24 +18,18 @@ class AffectNet(facedataset.FaceDataset):
     colors = ['tab:gray', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:olive', 'tab:red', 'tab:blue']
     markers = ['s', 'o', '>', '<', '^', 'v', 'P', 'd']
 
-    def __init__(self, root, cache_root=None, crop_source='bb_ground_truth',
-                 return_modified_images=False, **kwargs):
+    def __init__(self, root, cache_root=None, crop_source='bb_ground_truth', **kwargs):
         assert(crop_source in ['bb_ground_truth', 'lm_ground_truth', 'lm_cnn', 'lm_openface'])
 
         fullsize_img_dir = os.path.join(root, 'cropped_Annotated')
-        # super().__init__(root_dir=root_dir, root_dir_local=root_dir_local, fullsize_img_dir=fullsize_img_dir,
-        #                  return_landmark_heatmaps=False, crop_source=crop_source, **kwargs)
-
         super().__init__(root=root,
                          cache_root=cache_root,
                          fullsize_img_dir=fullsize_img_dir,
                          crop_source=crop_source,
-                         return_landmark_heatmaps=False,
-                         return_modified_images=return_modified_images,
+                         crop_border_mode='mirror',
                          **kwargs)
 
         self.rebalance_classes()
-        # self.feature_dir = os.path.join(self.root_dir, 'features')
 
 
     def _load_annotations(self, split):
@@ -59,24 +51,9 @@ class AffectNet(facedataset.FaceDataset):
             if self.train:
                 from sklearn.utils import shuffle
                 annotations = shuffle(annotations, random_state=2)
-
                 # remove samples with inconsistent expression<->valence/arousal values
                 # self._remove_outliers()
 
-            poses = []
-            confs = []
-            landmarks = []
-            for cnt, filename in enumerate(annotations.subDirectory_filePath):
-                if cnt % 1000 == 0:
-                    print(cnt)
-                filename_noext = os.path.splitext(filename)[0]
-                conf, lms, pose = ds_utils.read_openface_detection(os.path.join(self.feature_dir, filename_noext))
-                poses.append(pose)
-                confs.append(conf)
-                landmarks.append(lms)
-            annotations['pose'] = poses
-            annotations['conf'] = confs
-            annotations['landmarks_of'] = landmarks
             # self.annotations.to_csv(path_annotations_mod, index=False)
             annotations.to_pickle(path_annotations_mod)
 
@@ -98,7 +75,7 @@ class AffectNet(facedataset.FaceDataset):
 
 
     def rebalance_classes(self, max_images_per_class=MAX_IMAGES_PER_EXPRESSION):
-        if self.mode == TRAIN:
+        if max_images_per_class is not None and self.train:
             self._load_annotations(self.split)
             # balance class sized if neccessary
             print('Limiting number of images to {} per class...'.format(max_images_per_class))
@@ -107,8 +84,7 @@ class AffectNet(facedataset.FaceDataset):
             self.annotations['cls_idx'] = self.annotations.groupby('expression').cumcount()
             self.annotations = shuffle(self.annotations)
             self.annotations_balanced = self.annotations[self.annotations.cls_idx < max_images_per_class]
-            print(len(self.annotations))
-        self.limit_sample_count()
+            self._select_index_range()
 
     @property
     def labels(self):
@@ -122,10 +98,7 @@ class AffectNet(facedataset.FaceDataset):
     def widths(self):
         return self.annotations.face_width.values
 
-    def print_stats(self):
-        print(self._stats_repr())
-
-    def _stats_repr(self):
+    def extra_repr(self):
         labels = self.annotations.expression
         fmt_str =  "    Class sizes:\n"
         for id in np.unique(labels):
@@ -133,16 +106,6 @@ class AffectNet(facedataset.FaceDataset):
             fmt_str += "      {:<6} ({:.2f}%)\t({})\n".format(count, 100.0*count/self.__len__(), self.classes[id])
         fmt_str += "    --------------------------------\n"
         fmt_str += "      {:<6}\n".format(len(labels))
-        return fmt_str
-
-    def __repr__(self):
-        fmt_str = 'Dataset ' + self.__class__.__name__ + '\n'
-        fmt_str += '    Number of datapoints: {}\n'.format(self.__len__())
-        fmt_str += '    Split: {}\n'.format(self.mode)
-        # fmt_str += '    Root Location: {}\n'.format(self.root_dir)
-        # tmp = '    Transforms (if any): '
-        # fmt_str += '{0}{1}\n'.format(tmp, self.transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
-        fmt_str += self._stats_repr()
         return fmt_str
 
     def __len__(self):
@@ -169,16 +132,18 @@ class AffectNet(facedataset.FaceDataset):
     def __getitem__(self, idx):
         sample = self.annotations.iloc[idx]
         filename = sample.subDirectory_filePath
-        landmarks_to_return = self.parse_landmarks(sample.facial_landmarks)
         bb = self.get_adjusted_bounding_box(sample.face_x, sample.face_y, sample.face_width, sample.face_height)
-        landmarks_for_crop = sample.landmarks.astype(np.float32) if self.crop_source == 'lm_ground_truth' else None
+        landmarks_to_return = self.parse_landmarks(sample.facial_landmarks)
+        landmarks_for_crop = landmarks_to_return if self.crop_source == 'lm_ground_truth' else None
         return self.get_sample(filename, bb, landmarks_for_crop, landmarks_to_return=landmarks_to_return)
 
 
 
 if __name__ == '__main__':
     import argparse
-    from vis import vis
+    import torch
+    from csl_common.vis import vis
+    import config
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--extract', default=False, type=bool)
@@ -186,17 +151,18 @@ if __name__ == '__main__':
     parser.add_argument('--nd', default=None, type=int)
     args = parser.parse_args()
 
-    import torch
     torch.manual_seed(0)
     torch.cuda.manual_seed_all(0)
 
-    ds = AffectNet(image_size=256, train=True, start=0, align_face_orientation=False,
-                   use_cache=False, crop_source='bb_ground_truth')
+    dirs = config.get_dataset_paths('affectnet')
+    train = True
+    ds = AffectNet(root=dirs[0], image_size=256, cache_root=dirs[1], train=train, use_cache=False,
+                   transform=ds_utils.build_transform(deterministic=not train, daug=0),
+                   crop_source='lm_ground_truth')
     dl = td.DataLoader(ds, batch_size=10, shuffle=False, num_workers=0)
     # print(ds)
 
     for data in dl:
-        # data = next(iter(dl))
         batch = Batch(data, gpu=False)
 
         gt = to_numpy(batch.landmarks)
@@ -205,7 +171,6 @@ if __name__ == '__main__':
         ocular_dists = np.vstack((ocular_dists_inner, ocular_dists_outer)).mean(axis=0)
         print(ocular_dists)
 
-        inputs = batch.images.clone()
-        ds_utils.denormalize(inputs)
-        imgs = vis.add_landmarks_to_images(inputs.numpy(), batch.landmarks.numpy())
+        images = vis.to_disp_images(batch.images, denorm=True)
+        imgs = vis.add_landmarks_to_images(images, batch.landmarks.numpy())
         vis.vis_square(imgs, nCols=10, fx=1.0, fy=1.0, normalize=False)

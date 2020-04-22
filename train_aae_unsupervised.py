@@ -9,6 +9,7 @@ import datetime
 
 from csl_common.utils import log
 from csl_common.utils.nn import Batch
+import csl_common.utils.ds_utils as ds_utils
 from datasets import multi, affectnet, vggface2, wflw
 from constants import TRAIN, VAL
 from networks import aae
@@ -22,21 +23,6 @@ WITH_LOSS_ZREG = False
 
 cfg.register_dataset(affectnet.AffectNet)
 cfg.register_dataset(vggface2.VggFace2)
-
-# DATASETS = {
-#     affectnet.AffectNet.__name__: affectnet.AffectNet,
-#     'multi': multi.MultiFaceDataset,
-#     'vggface2': vggface2.VggFace2,
-#     '300w': w300.W300,
-#     'aflw': aflw.AFLW,
-#     'wflw': wflw.WFLW,
-#     'deepfashion': deepfashion.DeepFashion,
-#     'mafl': celeba.MAFL,
-#     'celeba': celeba.CelebA,
-#     'mtfl': mtfl.MTFL,
-#     'compcars': compcars.CompCars,
-#     'ffhq': ffhq.FFHQ,
-# }
 
 
 class AAEUnsupervisedTraining(AAETraining):
@@ -108,7 +94,7 @@ class AAEUnsupervisedTraining(AAETraining):
 
         log.info("{}".format('-'*140))
         str_stats = ['Train:         '
-                     'l={avg_loss_Q:.3f} '
+                     'l={avg_loss:.3f} '
                      'l_rec={avg_loss_recon:.3f} '
                      'l_ssim={avg_ssim_torch:.3f}({avg_ssim:.3f}) '
                      'l_lmrec={avg_lms_recon:.3f} '
@@ -326,7 +312,7 @@ class AAEUnsupervisedTraining(AAETraining):
             #######################
             # Adversarial loss
             #######################
-            if args.with_gan and self.args.train_decoder and self.iter_in_epoch%1 == 0:
+            if self.args.with_gan and self.args.train_decoder and self.iter_in_epoch%1 == 0:
                 gan_stats, loss_G = self.update_gan_old(X_target, X_recon, z_sample, train=not eval,
                                                         with_gen_loss=self.args.with_gen_loss)
                 loss += loss_G
@@ -406,6 +392,7 @@ def run(args):
         datasets_for_phase = []
         for name in dsnames:
             root, cache_root = cfg.get_dataset_paths(name)
+            transform = ds_utils.build_transform(deterministic=not train, daug=args.daug)
             dataset_cls = cfg.datasets[name]
             ds = dataset_cls(root=root,
                              cache_root=cache_root,
@@ -416,17 +403,15 @@ def run(args):
                              test_split=args.test_split,
                              align_face_orientation=args.align,
                              crop_source=args.crop_source,
-                             daug=args.daug,
-                             with_occlusions=args.occ and train,
-                             deterministic=not train,
+                             transform=transform,
                              image_size=args.input_size)
             datasets_for_phase.append(ds)
         if is_single_dataset:
             datasets[phase] = datasets_for_phase[0]
         else:
-            datasets[phase] = multi.MultiFaceDataset(datasets_for_phase, max_samples=args.train_count_multi)
+            datasets[phase] = multi.ConcatFaceDataset(datasets_for_phase, max_samples=args.train_count_multi)
 
-        # print(datasets[phase])
+        print(datasets[phase])
 
     fntr = AAEUnsupervisedTraining(datasets, args, session_name=args.sessionname,
                                    snapshot_interval=args.save_freq, workers=args.workers,
