@@ -236,7 +236,7 @@ This loops through the test set and visualizes results split into small batches 
 
 Figure 1 shows input images in the top row and their reconstructions below. Grouth truth landmarks are shown in green and predited landmarks in blue.
 Bottom left corners show SSIM error and reconstruction error (see [above](#autoencoder-training)).
-The 3 values in the bottom right are 
+The 3 values in the bottom right are normalized mean errors for inner/outer/all landmarks.
 
 
 The second figure shows ground truth heatmaps and predicted heatmaps for the same faces as Figure 1.
