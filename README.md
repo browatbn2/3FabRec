@@ -1,7 +1,9 @@
 # 3FabRec
-PyTorch implementation of '3FabRec: Fast Few-shot Face alignment by Reconstruction' (CVPR2020)
+This is the PyTorch implementation of the paper [**3FabRec: Fast Few-shot Face alignment by Reconstruction**](https://arxiv.org/abs/1911.10448) (CVPR 2020) by Björn Browatzki and Christian Wallraven.
 
-![Teaser](images/teaser.png) 
+3FabRec predicts 2D facial landmarks from a few annotated training images by leveraging implicit knowledge extracted from a generative model trained on unlabeled face images.
+
+![Teaser](images/teaser_paper.png) 
 
 ## Requirements
 
@@ -10,13 +12,23 @@ PyTorch implementation of '3FabRec: Fast Few-shot Face alignment by Reconstructi
 - CUDA >= 10.0
 - cuDNN >= 7.5
 
+## Getting started
+
+Download or clone the full repository.
+
+
+### Install dependencies
 ```
 pip install -r requirements.txt
 ```
 
-## Getting started
+### Download models
 
-Download or clone the full repository and run
+```
+./download_models.sh
+```
+
+### Run demo
 
 ```
 python demo.py
@@ -26,17 +38,22 @@ The output should look like this:
 
 ![demo](images/demo.png)
 
+Tiles: Input, reconstruction, heatmap overlay, pred. in recon., pred. in input.
+
+![demo-hm](images/ada-heatmap.png)
+
+Predicted landmark heatmaps (channels collapsed)
 
 
-## Prepare datasets
+## Preparing datasets
 
-We support the following datasets:
+To train your own models or run evaluations, you will need to download some of the following face datasets:
 
-For unsupervised face training
+For unsupervised face learning
 - VGGFace2
 - AffectNet
 
-For landmark detection
+For landmark training or evaluation
 - 300-W
 - AFLW
 - WFLW
@@ -56,7 +73,7 @@ Image crops and metadata are created automatically when loading original images 
 
 ### Autoencoder training
 
-To train a basic model on VGGFace2 and AffectNet with image size of 256x256 and standard data augmentations run:
+To train a basic model on VGGFace2 and AffectNet with image size of 256x256 and standard data augmentations, run:
 
 ```
 python train_aae_unsupervised.py --sessionname my_model --daug 4 --dataset-train vggface2 affectnet --input-size 256 --epochs 1 
@@ -168,23 +185,79 @@ If show is True (default), visualizations will also shown on screen:
 ![ae-ssim](images/ae-ssim.png)
 
 
-### Training landmark detection
+### Training landmark detection (full data)
 
-To train, for example, the previous autoencoder model on landmarks from the 300-W dataset, run:
+To train, for example, the previous autoencoder model on landmarks from the 300-W dataset:
 
 ```
 python train_aae_landmarks.py --sessionname lms_300w -r my_model/00003 --dataset 300w 
 ```
 
+**Finetune encoder `--train-encoder 1`:**
+
+```
+python train_aae_landmarks.py --sessionname lms_300w -r my_model/00003 --dataset 300w  --train-encoder 1
+```
+
+### Training landmark detection (few show)
+
+Train using 50 images from 300-W:
+
+```
+python train_aae_landmarks.py --sessionname lms_300w_50 -r my_model/00003 --dataset 300w --train-count 50 --
+```
+
+Please note: For very low image counts (<50), encoder finetuning only leads to small performance gains and might even result in overfitting (worse performace).
+
 
 ## Evaluation
 
-To visualize detections using on a test set:
+### Visualize results
+
+To visualize some detections on WFLW for example:
 
 ```
-python eval_aae_landmarks.py -r model/00003 --dataset 300w 
+python eval_aae_landmarks.py -r lms_wflw --dataset wflw
+```
+```
+...
+[2020-05-20 17:26:04] Resuming session lms_wflw from snapshot lms_wflw/00150...
+[2020-05-20 17:26:04] Model lms_wflw/00150 trained for 2589834 iterations (7 days, 8:43:24).
+[2020-05-20 17:26:04] 
+[2020-05-20 17:26:04] Starting evaluation of 'lms_wflw'...
+[2020-05-20 17:26:04] 
+[2020-05-20 17:26:05] [151][(1/20] l_rec=14.215 ssim=2.000 l_lms=0.2655 err_lms=3.52/6.46/4.51 0.14/0.42/0.56s (2589835 0:00:00)
+...
 ```
 
+This loops through the test set and visualizes results split into small batches of 10 images.
+
+![lms-results](images/lms-results.png)
+
+Figure 1 shows input images in the top row and their reconstructions below. Grouth truth landmarks are shown in green and predited landmarks in blue.
+Bottom left corners show SSIM error and reconstruction error (see [above](#autoencoder-training)).
+The 3 values in the bottom right are 
+
+
+The second figure shows ground truth heatmaps and predicted heatmaps for the same faces as Figure 1.
+
+![lms-heatmaps](images/lms-heatmaps.png)
+
+
+### Benchmark performance
+
+To evaluate performance on the entire test set, switch to benchmark mode (`--benchmark`). To run on a specific subset use param `--test-split`.
+
+```
+python eval_aae_landmarks.py -r lms_wflw --dataset wflw --test-split make-up --benchmark
+```
+
+```
+...
+[2020-05-20 18:08:07] NME:    6.125
+[2020-05-20 18:08:07] FR@10: 10.680 (22)
+[2020-05-20 18:08:07] AUC:   0.4461
+```
 
 
 ## Citation
