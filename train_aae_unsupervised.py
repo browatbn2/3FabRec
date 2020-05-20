@@ -422,9 +422,9 @@ if __name__ == '__main__':
     aae_training.add_arguments(parser)
 
     # Autoencoder losses
-    parser.add_argument('--with-gan', type=bool_str, default=True, help='use GAN image loss(es)')
+    parser.add_argument('--with-gan', type=bool_str, default=False, help='use GAN image loss(es)')
     parser.add_argument('--with-gen-loss', type=bool_str, default=False, help='with generative image loss')
-    parser.add_argument('--with-ssim-loss', type=bool_str, default=True, help='with structural loss')
+    parser.add_argument('--with-ssim-loss', type=bool_str, default=False, help='with structural loss')
     parser.add_argument('--with-zgan', type=bool_str, default=True, help='with hidden vector loss')
     parser.add_argument('--w-gen', default=0.25, type=float, help='weight of generative image loss')
     parser.add_argument('--w-rec', default=1., type=float, help='weight of pixel loss')
