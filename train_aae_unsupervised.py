@@ -6,11 +6,12 @@ import torch.utils.data as td
 import pandas as pd
 import numpy as np
 import datetime
+import neptune
 
 from csl_common.utils import log
 from csl_common.utils.nn import Batch
 import csl_common.utils.ds_utils as ds_utils
-from datasets import multi, affectnet, vggface2, wflw
+from datasets import multi, affectnet, vggface2, wflw, w300
 from constants import TRAIN, VAL
 from networks import aae
 from aae_training import AAETraining
@@ -20,9 +21,6 @@ import config as cfg
 eps = 1e-8
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 WITH_LOSS_ZREG = False
-
-cfg.register_dataset(affectnet.AffectNet)
-cfg.register_dataset(vggface2.VggFace2)
 
 
 class AAEUnsupervisedTraining(AAETraining):
@@ -144,7 +142,6 @@ class AAEUnsupervisedTraining(AAETraining):
         log.info("Starting evaluation of '{}'...".format(self.session_name))
         log.info("")
 
-        self.time_start_eval = time.time()
         epoch_starttime = time.time()
 
         self.epoch_stats = []
@@ -227,6 +224,7 @@ class AAEUnsupervisedTraining(AAETraining):
         iter_stats = {'time_dataloading': time_dataloading}
 
         batch = Batch(data, eval=eval)
+        X_target = batch.target_images if batch.target_images is not None else batch.images
 
         self.saae.zero_grad()
         loss = torch.zeros(1, requires_grad=True).cuda()
@@ -238,32 +236,16 @@ class AAEUnsupervisedTraining(AAETraining):
 
             z_sample = self.saae.Q(batch.images)
 
-            if WITH_LOSS_ZREG:
-                loss_zreg = torch.abs(z_sample).mean()
-                loss += loss_zreg
-                iter_stats.update({'loss_zreg': loss_zreg.item()})
-
             ###########################
-            # Embedding regularization
+            # Encoding regularization
             ###########################
-            if (not eval or self._is_printout_iter()) and self.args.with_zgan and self.args.train_encoder:
-                # Discriminator
-                if self.iter_in_epoch % 4 == 0:
-                    z_real = self.enc_rand_like(z_sample).to(device)
-                    D_real = self.saae.D_z(z_real)
-                    D_fake = self.saae.D_z(z_sample.detach())
-                    loss_D_z = -torch.mean(torch.log(D_real + eps) + torch.log(1 - D_fake + eps))
-                    loss_D_z.backward()
-                    self.optimizer_D_z.step()
-                    iter_stats['loss_D_z'] = loss_D_z.item()
-
-                # Encoder gaussian loss
-                if self.iter_in_epoch % 2 == 0:
-                    D_fake = self.saae.D_z(z_sample)
-                    loss_E = -torch.mean(torch.log(D_fake + eps))
-                    loss_E.backward(retain_graph=True)
-                    self.optimizer_Q.step()
-                    iter_stats['loss_E'] = loss_E.item()
+            if (not eval or self._is_printout_iter(eval)) and self.args.with_zgan and self.args.train_encoder:
+                if WITH_LOSS_ZREG:
+                    loss_zreg = torch.abs(z_sample).mean()
+                    loss += loss_zreg
+                    iter_stats.update({'loss_zreg': loss_zreg.item()})
+                encoding = self.update_encoding(z_sample)
+                iter_stats.update(encoding)
 
         iter_stats['z_recon_mean'] = z_sample.mean().item()
         iter_stats['z_recon_std'] = z_sample.std().item()
@@ -284,10 +266,10 @@ class AAEUnsupervisedTraining(AAETraining):
             #######################
             # Reconstruction loss
             #######################
-            X_target = batch.target_images if batch.target_images is not None else batch.images
             loss_recon = aae_training.loss_recon(X_target, X_recon)
             loss = loss_recon * self.args.w_rec #+ loss_z * 0.1
             iter_stats['loss_recon'] = loss_recon.item()
+            # neptune.log_metric('loss_recon', self.total_iter, loss_recon.item())
 
             # if eval and batch.landmarks is not None:
             #     iter_stats['landmark_ssim_scores'] = lmutils.calc_landmark_ssim_score(X_target, X_recon, batch.landmarks).mean()
@@ -301,10 +283,10 @@ class AAEUnsupervisedTraining(AAETraining):
             #######################
             cs_error_maps = None
             if self.args.with_ssim_loss or eval:
-                store_cs_maps = self._is_printout_iter()  # get error maps for visualization
+                store_cs_maps = self._is_printout_iter(eval) or eval  # get error maps for visualization
                 loss_ssim, cs_error_maps = aae_training.loss_struct(X_target, X_recon, self.ssim,
                                                                     calc_error_maps=store_cs_maps)
-                loss_ssim *= args.w_ssim
+                loss_ssim *= self.args.w_ssim
                 loss = 0.5 * loss + 0.5 * loss_ssim
                 iter_stats['ssim_torch'] = loss_ssim.item()
 
@@ -313,12 +295,13 @@ class AAEUnsupervisedTraining(AAETraining):
             # Adversarial loss
             #######################
             if self.args.with_gan and self.args.train_decoder and self.iter_in_epoch%1 == 0:
-                gan_stats, loss_G = self.update_gan_old(X_target, X_recon, z_sample, train=not eval,
-                                                        with_gen_loss=self.args.with_gen_loss)
+                gan_stats, loss_G = self.update_gan(X_target, X_recon, z_sample, train=not eval,
+                                                    with_gen_loss=self.args.with_gen_loss)
                 loss += loss_G
                 iter_stats.update(gan_stats)
 
             iter_stats['loss'] = loss.item()
+            # neptune.log_metric('loss', self.total_iter, loss.item())
 
             if self.args.train_decoder:
                 loss.backward()
@@ -326,11 +309,11 @@ class AAEUnsupervisedTraining(AAETraining):
             # Update auto-encoder
             if not eval:
                 if self.args.train_encoder:
-                    self.optimizer_Q.step()
+                    self.optimizer_E.step()
                 if self.args.train_decoder:
-                    self.optimizer_P.step()
+                    self.optimizer_G.step()
 
-            if eval or self._is_printout_iter():
+            if eval or self._is_printout_iter(eval):
                 iter_stats['ssim'] = aae_training.calc_ssim(X_target, X_recon)
 
         # statistics
@@ -347,13 +330,12 @@ class AAEUnsupervisedTraining(AAETraining):
         self.epoch_stats.append(iter_stats)
 
         # print stats every N mini-batches
-        if self._is_printout_iter():
-            self._print_iter_stats(self.epoch_stats[-self.print_interval:])
+        if self._is_printout_iter(eval):
+            self._print_iter_stats(self.epoch_stats[-self._print_interval(eval):])
 
-        #
-        # Batch visualization
-        #
-        if self._is_printout_iter() or eval:
+            #
+            # Batch visualization
+            #
             if self.args.show:
                 num_sample_images = {
                     128: 8,
@@ -362,7 +344,7 @@ class AAEUnsupervisedTraining(AAETraining):
                     1024: 1,
                 }
                 nimgs = num_sample_images[self.args.input_size]
-                # self.visualize_random_images(nimgs, z_real=z_sample)
+                self.visualize_random_images(nimgs, z_real=z_sample)
                 self.visualize_interpolations(z_sample, nimgs=2)
                 self.visualize_batch(batch, X_recon, nimgs=nimgs, ssim_maps=cs_error_maps, ds=ds, wait=self.wait)
 
@@ -393,7 +375,7 @@ def run(args):
         for name in dsnames:
             root, cache_root = cfg.get_dataset_paths(name)
             transform = ds_utils.build_transform(deterministic=not train, daug=args.daug)
-            dataset_cls = cfg.datasets[name]
+            dataset_cls = cfg.get_dataset_class(name)
             ds = dataset_cls(root=root,
                              cache_root=cache_root,
                              train=train,
@@ -440,27 +422,30 @@ if __name__ == '__main__':
     aae_training.add_arguments(parser)
 
     # Autoencoder losses
-    parser.add_argument('--with-gan', type=bool_str, default=False, help='use GAN image loss(es)')
+    parser.add_argument('--with-gan', type=bool_str, default=True, help='use GAN image loss(es)')
     parser.add_argument('--with-gen-loss', type=bool_str, default=False, help='with generative image loss')
-    parser.add_argument('--with-ssim-loss', type=bool_str, default=False, help='with structural loss')
+    parser.add_argument('--with-ssim-loss', type=bool_str, default=True, help='with structural loss')
     parser.add_argument('--with-zgan', type=bool_str, default=True, help='with hidden vector loss')
     parser.add_argument('--w-gen', default=0.25, type=float, help='weight of generative image loss')
     parser.add_argument('--w-rec', default=1., type=float, help='weight of pixel loss')
     parser.add_argument('--w-ssim', default=60., type=float, help='weight of structural image loss')
+    parser.add_argument('--update-D-freq', default=2, type=int, help='update the discriminator every N steps')
+    parser.add_argument('--update-E-freq', default=1, type=int, help='update the encoder every N steps')
 
     # Datasets
     parser.add_argument('--dataset-train',
-                        # default=['vggface2', 'affectnet'],
-                        default=['affectnet'],
+                        default=['vggface2', 'affectnet'],
+                        # default=['affectnet'],
+                        # default=['vggface2'],
                         type=str,
-                        choices=cfg.datasets,
+                        choices=cfg.get_registered_dataset_names(),
                         nargs='+',
                         help='dataset(s) for training.')
     parser.add_argument('--dataset-val',
-                        default=None,
+                        default=['vggface2'],
                         type=str,
                         help='dataset for training.',
-                        choices=cfg.datasets,
+                        choices=cfg.get_registered_dataset_names(),
                         nargs='+')
     parser.add_argument('--test-split',
                         default='train',

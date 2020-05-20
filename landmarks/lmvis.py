@@ -7,9 +7,8 @@ from skimage.metrics import structural_similarity as compare_ssim
 from csl_common.utils import nn as nn
 from csl_common.utils.nn import to_numpy
 from csl_common import vis
-from landmarks import lmconfig as lmcfg
 from landmarks.lmutils import calc_landmark_nme, calc_landmark_ssim_score, to_single_channel_heatmap, \
-    calc_landmark_nme_per_img
+    calc_landmark_nme_per_img, smooth_heatmaps
 
 
 def show_landmark_heatmaps(pred_heatmaps, gt_heatmaps, nimgs, f=1.0):
@@ -44,7 +43,7 @@ def visualize_batch(images, landmarks, X_recon, X_lm_hm, lm_preds_max,
 
     nimgs = min(10, len(images))
     images = nn.atleast4d(images)[:nimgs]
-    num_landmarks = landmarks.shape[1]
+    num_landmarks = lm_preds_max.shape[1]
 
     if landmarks_to_draw is None:
         landmarks_to_draw = range(num_landmarks)
@@ -187,35 +186,64 @@ def visualize_batch(images, landmarks, X_recon, X_lm_hm, lm_preds_max,
     cv2.waitKey(wait)
 
 
-def visualize_random_faces(net, nimgs=10, wait=10, f=1.0):
-    z_random = torch.randn(nimgs, net.z_dim).cuda()
+def visualize_images(X, X_lm_hm, landmarks=None, show_recon=True, show_landmarks=True, show_heatmaps=False,
+                     draw_wireframe=False, smoothing_level=2, heatmap_opacity=0.8, f=1):
+
+    if show_recon:
+        disp_X = vis.to_disp_images(X, denorm=True)
+    else:
+        disp_X = vis.to_disp_images(torch.zeros_like(X), denorm=False)
+        heatmap_opacity = 1
+
+    if X_lm_hm is not None:
+        if smoothing_level > 0:
+            X_lm_hm = smooth_heatmaps(X_lm_hm)
+        if smoothing_level > 1:
+            X_lm_hm = smooth_heatmaps(X_lm_hm)
+
+    if show_heatmaps:
+        pred_heatmaps = to_single_channel_heatmap(to_numpy(X_lm_hm))
+        pred_heatmaps = [cv2.resize(im, None, fx=f, fy=f, interpolation=cv2.INTER_CUBIC) for im in pred_heatmaps]
+        disp_X = [vis.overlay_heatmap(disp_X[i], pred_heatmaps[i], heatmap_opacity) for i in range(len(pred_heatmaps))]
+
+    if show_landmarks and landmarks is not None:
+        pred_color = (0,255,255)
+        disp_X = vis.add_landmarks_to_images(disp_X, landmarks, color=pred_color, draw_wireframe=draw_wireframe)
+
+    return disp_X
+
+
+def generate_images(net, z_random, **kwargs):
     with torch.no_grad():
         X_gen_vis = net.P(z_random)[:, :3]
         X_lm_hm = net.LMH(net.P)
-    pred_heatmaps = to_single_channel_heatmap(to_numpy(X_lm_hm[:nimgs]))
-    pred_heatmaps = [cv2.resize(im, None, fx=f, fy=f, interpolation=cv2.INTER_NEAREST) for im in pred_heatmaps]
-    disp_X_gen = to_numpy(nn.denormalized(X_gen_vis).permute(0, 2, 3, 1))
-    disp_X_gen = (disp_X_gen * 255).astype(np.uint8)
-    # disp_X_gen = [vis.overlay_heatmap(disp_X_gen[i], pred_heatmaps[i]) for i in range(len(pred_heatmaps))]
+    return visualize_images(X_gen_vis, X_lm_hm, **kwargs)
 
+
+def visualize_random_faces(net, nimgs=10, wait=10, f=1.0):
+    z_random = torch.randn(nimgs, net.z_dim).cuda()
+    disp_X_gen = generate_images(net, z_random)
     grid_img = vis.make_grid(disp_X_gen, nCols=nimgs//2)
     cv2.imshow("random faces", cv2.cvtColor(grid_img, cv2.COLOR_RGB2BGR))
     cv2.waitKey(wait)
 
 
-def visualize_batch_CVPR(images, landmarks, X_recon, X_lm_hm, lm_preds,
-                         lm_heatmaps=None, ds=None, wait=0, horizontal=False, f=1.0, radius=2):
+def visualize_batch_CVPR(images, landmarks, X_recon, X_lm_hm, lm_preds, show_recon=True,
+                         lm_heatmaps=None, ds=None, wait=0, horizontal=False, f=1.0, radius=2,
+                         draw_wireframes=False):
 
     gt_color = (0,255,0)
     pred_color = (0,255,255)
+    # pred_color = (255,0,0)
 
     nimgs = min(10, len(images))
     images = nn.atleast4d(images)[:nimgs]
-    if landmarks is None:
-        print('num landmarks', lmcfg.NUM_LANDMARKS)
-        lm_gt = np.zeros((nimgs, lmcfg.NUM_LANDMARKS, 2))
-    else:
-        lm_gt = nn.atleast3d(to_numpy(landmarks))[:nimgs]
+    num_landmarks = lm_preds.shape[1]
+
+    # if landmarks is None:
+    #     print('num landmarks', num_landmarks)
+    #     lm_gt = np.zeros((nimgs, num_landmarks, 2))
+    # else:
 
     # show landmark heatmaps
     pred_heatmaps = None
@@ -231,7 +259,6 @@ def visualize_batch_CVPR(images, landmarks, X_recon, X_lm_hm, lm_preds,
 
     # resize images for display and scale landmarks accordingly
     lm_preds = lm_preds[:nimgs] * f
-    lm_gt *= f
 
     rows = []
 
@@ -239,34 +266,44 @@ def visualize_batch_CVPR(images, landmarks, X_recon, X_lm_hm, lm_preds,
     disp_images = [cv2.resize(im, None, fx=f, fy=f, interpolation=cv2.INTER_NEAREST) for im in disp_images]
     rows.append(vis.make_grid(disp_images, nCols=nimgs, normalize=False))
 
-    recon_images = vis.to_disp_images(X_recon[:nimgs], denorm=True)
+    heatmap_opacity = 1.0
+    if show_recon:
+        recon_images = vis.to_disp_images(X_recon[:nimgs], denorm=True)
+    else:
+        recon_images = vis.to_disp_images(torch.ones_like(X_recon[:nimgs]), denorm=False)
+        heatmap_opacity = 1
+
     disp_X_recon = [cv2.resize(im, None, fx=f, fy=f, interpolation=cv2.INTER_NEAREST) for im in recon_images.copy()]
     rows.append(vis.make_grid(disp_X_recon, nCols=nimgs))
 
-    # recon_images = vis._to_disp_images(X_recon[:nimgs], denorm=True)
+    # overlay landmarks on images
+    disp_X_recon_hm = [cv2.resize(im, None, fx=f, fy=f, interpolation=cv2.INTER_NEAREST) for im in recon_images.copy()]
+    disp_X_recon_hm = [vis.overlay_heatmap(disp_X_recon_hm[i], pred_heatmaps[i], heatmap_opacity) for i in range(len(pred_heatmaps))]
+    rows.append(vis.make_grid(disp_X_recon_hm, nCols=nimgs))
+
+    # reconstructions with prediction
     disp_X_recon_pred = [cv2.resize(im, None, fx=f, fy=f, interpolation=cv2.INTER_NEAREST) for im in recon_images.copy()]
     disp_X_recon_pred = vis.add_landmarks_to_images(disp_X_recon_pred, lm_preds, color=pred_color,radius=radius)
     rows.append(vis.make_grid(disp_X_recon_pred, nCols=nimgs))
 
-    disp_X_recon_gt = [cv2.resize(im, None, fx=f, fy=f, interpolation=cv2.INTER_NEAREST) for im in recon_images.copy()]
-    disp_X_recon_gt = vis.add_landmarks_to_images(disp_X_recon_gt, lm_gt, color=gt_color, radius=radius)
-    rows.append(vis.make_grid(disp_X_recon_gt, nCols=nimgs))
-
-    # overlay landmarks on images
-    disp_X_recon_hm = [cv2.resize(im, None, fx=f, fy=f, interpolation=cv2.INTER_NEAREST) for im in recon_images.copy()]
-    disp_X_recon_hm = [vis.overlay_heatmap(disp_X_recon_hm[i], pred_heatmaps[i]) for i in range(len(pred_heatmaps))]
-    rows.append(vis.make_grid(disp_X_recon_hm, nCols=nimgs))
+    # reconstructions with ground truth (if gt available)
+    if landmarks is not None:
+        lm_gt = nn.atleast3d(to_numpy(landmarks))[:nimgs] * f
+        disp_X_recon_gt = [cv2.resize(im, None, fx=f, fy=f, interpolation=cv2.INTER_NEAREST) for im in recon_images.copy()]
+        disp_X_recon_gt = vis.add_landmarks_to_images(disp_X_recon_gt, lm_gt, color=gt_color, radius=radius)
+        rows.append(vis.make_grid(disp_X_recon_gt, nCols=nimgs))
 
     # input images with prediction (and ground truth)
     disp_images_pred = vis.to_disp_images(images[:nimgs], denorm=True)
     disp_images_pred = [cv2.resize(im, None, fx=f, fy=f, interpolation=cv2.INTER_NEAREST) for im in disp_images_pred]
     # disp_images_pred = vis.add_landmarks_to_images(disp_images_pred, lm_gt, color=gt_color, radius=radius)
-    disp_images_pred = vis.add_landmarks_to_images(disp_images_pred, lm_preds, color=pred_color, radius=radius)
+    disp_images_pred = vis.add_landmarks_to_images(disp_images_pred, lm_preds, color=pred_color, radius=radius,
+                                                   draw_wireframe=draw_wireframes)
     rows.append(vis.make_grid(disp_images_pred, nCols=nimgs))
 
     if horizontal:
         assert(nimgs == 1)
-        disp_rows = vis.make_grid(rows, nCols=2)
+        disp_rows = vis.make_grid(rows, nCols=len(rows))
     else:
         disp_rows = vis.make_grid(rows, nCols=1)
     wnd_title = 'recon errors '

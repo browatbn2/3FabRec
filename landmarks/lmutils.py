@@ -73,7 +73,7 @@ def make_landmark_template(wnd_size, sigma):
     Z = np.sqrt(X**2 + Y**2)
     N = gaussian(Z, 0, sigma)
     # return (N/N.max())**2  # square to make sharper
-    return (N/N.max())
+    return N / N.max()
 
 
 def _fill_heatmap_layer(dst, lms, lm_id, lm_heatmap_window, wnd_size):
@@ -150,17 +150,6 @@ def convert_to_hamming_encoded_heatmaps(hms):
         encoded_hms[l] = merge_layers(hms[selected_layer_ids].copy())
     # decode_heatmaps(encoded_hms)
     return encoded_hms
-
-
-def decode_heatmap_blob(hms):
-    assert len(hms.shape) == 4
-    if hms.shape[1] == lmcfg.NUM_LANDMARK_HEATMAPS: # no decoding necessary
-        return hms
-    assert hms.shape[1] == len(hm_code_mat)
-    hms68 = np.zeros((hms.shape[0], 68, hms.shape[2], hms.shape[3]), dtype=np.float32)
-    for img_idx in range(len(hms)):
-        hms68[img_idx] = decode_heatmaps(to_numpy(hms[img_idx]))[0]
-    return hms68
 
 
 def decode_heatmaps(hms):
@@ -414,9 +403,9 @@ def to_single_channel_heatmap(lm_heatmaps):
     return mc
 
 
-# LM68_TO_LM96 = 1
+LM68_TO_LM96 = 1
 LM98_TO_LM68 = 2
-LM68_TO_LM5 = 2
+LM68_TO_LM5 = 3
 
 def convert_landmarks(lms, code):
     cvt_func = {
@@ -437,6 +426,7 @@ def convert_landmarks(lms, code):
         return cvt_func[code](lms)
     else:
         raise ValueError
+
 
 def lm68_to_lm5(lm68, lm5):
     # lm5 = np.zeros((len(lm68), 5, 2), dtype=np.float32)
@@ -490,14 +480,11 @@ def lm98_to_lm68(lm98):
 def is_good_landmark(confs, rec_errs=None):
     if rec_errs is not None:
         low_errors = rec_errs < 0.25
-        # if isinstance(low_error):
-        #     low_erres
         confs *= np.array(low_errors).astype(int)
     return confs > 0.8
 
 
 def smooth_heatmaps(hms):
-    # assert isinstance(hms, np.ndarray)
     assert(len(hms.shape) == 4)
     hms = to_numpy(hms)
     for i in range(hms.shape[0]):
@@ -505,3 +492,23 @@ def smooth_heatmaps(hms):
             hms[i,l] = cv2.blur(hms[i,l], (9,9), borderType=cv2.BORDER_CONSTANT)
             # hms[i,l] = cv2.GaussianBlur(hms[i,l], (9,9), sigmaX=9, borderType=cv2.BORDER_CONSTANT)
     return hms
+
+
+def heatmaps_to_landmarks(hms, target_size):
+    def landmark_id_to_heatmap_id(lm_id):
+        return {lm: i for i,lm in enumerate(range(num_landmarks))}[lm_id]
+
+    assert len(hms.shape) == 4
+    num_images = hms.shape[0]
+    num_landmarks = hms.shape[1]
+    heatmap_size = hms.shape[-1]
+    lms = np.zeros((num_images, num_landmarks, 2), dtype=int)
+    if hms.shape[1] > 3:
+        # print(hms.max())
+        for i in range(len(hms)):
+            heatmaps = to_numpy(hms[i])
+            for l in range(len(heatmaps)):
+                hm = heatmaps[landmark_id_to_heatmap_id(l)]
+                lms[i, l, :] = np.unravel_index(np.argmax(hm, axis=None), hm.shape)[::-1]
+    lm_scale = heatmap_size / target_size
+    return lms / lm_scale

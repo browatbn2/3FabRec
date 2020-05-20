@@ -7,14 +7,24 @@ DECODER_SPECTRAL_NORMALIZATION = False
 DECODER_PLANES_PER_BLOCK = 1
 
 
-datasets = {}
+__datasets = {}
+
 def register_dataset(cls):
-    datasets[cls.__name__.lower()] = cls
+    __datasets[cls.__name__.lower()] = cls
+
+
+def get_dataset_class(name):
+    return __datasets[name]
+
+
+def get_registered_dataset_names():
+    return __datasets
 
 
 _default_config_files = [
     './local_config.ini',
-    '../local_config.ini'
+    '../local_config.ini',
+    '/home/browatbn/dev/csl/faces/local_config.ini'
 ]
 
 
@@ -57,6 +67,14 @@ def read_local_config():
 
     _paths = _parser.parse_known_args()[0]
     return _paths
+
+
+def get_neptune_token():
+    import configargparse
+    _parser = configargparse.ArgParser(default_config_files=_default_config_files)
+    _parser.add_argument('--neptune-token', default=None, type=str,  help='Neptune.ai API token for logging')
+    _args = _parser.parse_known_args()[0]
+    return _args.neptune_token
 
 
 _paths = read_local_config()

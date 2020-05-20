@@ -85,10 +85,7 @@ class AAE(nn.Module):
                                ).cuda()
 
         self.D_z = D_net_gauss(self.z_dim).cuda()
-
         self.D = Discriminator().cuda()
-        # self.D = resnet_ae.DiscriminatorHead().cuda()
-        # self.D = archs.ShortDiscriminator().cuda()
 
         print("Trainable params Q: {:,}".format(count_parameters(self.Q)))
         print("Trainable params P: {:,}".format(count_parameters(self.P)))
@@ -105,8 +102,8 @@ class AAE(nn.Module):
         return [to_numpy(self.z)]
 
     def forward(self, X):
-        self.z = self.Q(X)
-        outputs = self.P(self.z)
+        self.z = self.E(X)
+        outputs = self.G(self.z)
         self.landmark_heatmaps = None
         if outputs.shape[1] > 3:
             self.landmark_heatmaps = outputs[:,3:]

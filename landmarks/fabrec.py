@@ -12,6 +12,22 @@ from csl_common import utils
 import landmarks.lmconfig as lmcfg
 import landmarks.lmutils
 from networks import aae
+from csl_common.utils import nn
+
+
+def load_net(model, num_landmarks=None):
+    meta = nn.read_meta(model)
+    input_size = meta.get('input_size', 256)
+    output_size = meta.get('output_size', input_size)
+    if num_landmarks is None:
+        num_landmarks = 98
+    num_landmarks = meta.get('num_landmarks', num_landmarks)
+    z_dim = meta.get('z_dim', 99)
+    net = Fabrec(num_landarks=num_landmarks, input_size=input_size, output_size=output_size, z_dim=z_dim)
+    print("Loading model {}...".format(model))
+    nn.read_model(model, 'saae', net)
+    return net
+
 
 
 class Fabrec(aae.AAE):
@@ -78,7 +94,6 @@ class Fabrec(aae.AAE):
     def detect_landmarks(self, X):
         X_recon = self.forward(X)
         X_lm_hm = self.LMH(self.P)
-        # X_lm_hm = landmarks.lmutils.decode_heatmap_blob(X_lm_hm)
         X_lm_hm = landmarks.lmutils.smooth_heatmaps(X_lm_hm)
         lm_preds = to_numpy(self.heatmaps_to_landmarks(X_lm_hm))
         return X_recon, lm_preds, X_lm_hm

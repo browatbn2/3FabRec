@@ -1,11 +1,7 @@
 import time
-
-import landmarks.lmconfig as lmcfg
 import datetime
-import cv2
 import os
 import pandas as pd
-
 import numpy as np
 
 import torch
@@ -14,24 +10,15 @@ import torch.nn.modules.distance
 import torch.optim as optim
 import torch.nn.functional as F
 
-import landmarks.lmvis
+import config as cfg
 from datasets import wflw, w300, aflw
 from constants import TRAIN, VAL
 from csl_common.utils import log
-
 from csl_common.utils.nn import to_numpy, Batch
 from train_aae_unsupervised import AAETraining
-from landmarks import lmutils
-from landmarks import fabrec
+from landmarks import lmutils, lmvis, fabrec
+import landmarks.lmconfig as lmcfg
 import aae_training
-import config as cfg
-
-cfg.register_dataset(w300.W300)
-cfg.register_dataset(aflw.AFLW)
-cfg.register_dataset(wflw.WFLW)
-
-eps = 1e-8
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class AAELandmarkTraining(AAETraining):
@@ -50,21 +37,22 @@ class AAELandmarkTraining(AAETraining):
         super().__init__(datasets, args, session_name, macro_batch_size=0, **kwargs)
 
         self.optimizer_lm_head = optim.Adam(self.saae.LMH.parameters(), lr=args.lr_heatmaps, betas=(0.9,0.999))
-        self.optimizer_Q = optim.Adam(self.saae.Q.parameters(), lr=0.00002, betas=(0.9, 0.999))
-        # self.optimizer_P = optim.Adam(self.saae.P.parameters(), lr=0.00002, betas=(0.9, 0.999))
+        self.optimizer_E = optim.Adam(self.saae.Q.parameters(), lr=0.00002, betas=(0.9, 0.999))
+        # self.optimizer_G = optim.Adam(self.saae.P.parameters(), lr=0.00002, betas=(0.9, 0.999))
 
     def _get_network(self, pretrained):
         return fabrec.Fabrec(self.num_landmarks, input_size=self.args.input_size, z_dim=self.args.embedding_dims)
 
-    def print_eval_metrics(self, nmes, show=False):
-        def ced_curve(nmes):
-            Y = []
-            X = np.linspace(0, 10, 50)
-            for th in X:
-                recall = 1.0 - lmutils.calc_landmark_failure_rate(nmes, th)
-                recall *= 1/len(X)
-                Y.append(recall)
-            return X,Y
+    @staticmethod
+    def print_eval_metrics(nmes, show=False):
+        def ced_curve(_nmes):
+            y = []
+            x = np.linspace(0, 10, 50)
+            for th in x:
+                recall = 1.0 - lmutils.calc_landmark_failure_rate(_nmes, th)
+                recall *= 1/len(x)
+                y.append(recall)
+            return x, y
 
         def auc(recalls):
             return np.sum(recalls)
@@ -128,7 +116,7 @@ class AAELandmarkTraining(AAETraining):
 
         try:
             nmes = np.concatenate([s['nmes'] for s in self.epoch_stats if 'nmes' in s])
-        except:
+        except KeyError:
             nmes = np.zeros((1,100))
 
         duration = int(time.time() - epoch_starttime)
@@ -175,8 +163,6 @@ class AAELandmarkTraining(AAETraining):
         log.info("Starting evaluation of '{}'...".format(self.session_name))
         log.info("")
 
-        self.training = False
-        self.time_start_eval = time.time()
         epoch_starttime = time.time()
         self.epoch_stats = []
         self.saae.eval()
@@ -197,7 +183,6 @@ class AAELandmarkTraining(AAETraining):
             log.info('Epoch {}/{}'.format(self.epoch + 1, num_epochs))
             log.info('=' * 10)
 
-            self.training = True
             self.epoch_stats = []
             epoch_starttime = time.time()
 
@@ -225,9 +210,8 @@ class AAELandmarkTraining(AAETraining):
         self.iters_per_epoch = int(len(dataset) / batchsize)
         self.iter_starttime = time.time()
         self.iter_in_epoch = 0
-        dataloader = td.DataLoader(dataset, batch_size=batchsize, shuffle=not eval, num_workers=self.workers,
-                                   drop_last=not eval)
-
+        dataloader = td.DataLoader(dataset, batch_size=batchsize, shuffle=not eval,
+                                   num_workers=self.workers, drop_last=not eval)
         for data in dataloader:
             self._run_batch(data, eval=eval)
             self.total_iter += 1
@@ -257,7 +241,7 @@ class AAELandmarkTraining(AAETraining):
         with torch.set_grad_enabled(self.args.train_encoder and not eval):
             X_recon = self.saae.P(z_sample)
 
-        # calculate reconstruction error debugging and reporting
+        # calculate reconstruction error for debugging and reporting
         with torch.no_grad():
             iter_stats['loss_recon'] = aae_training.loss_recon(batch.images, X_recon)
 
@@ -273,14 +257,14 @@ class AAELandmarkTraining(AAETraining):
                 loss_lms = F.mse_loss(batch.lm_heatmaps, X_lm_hm) * 100 * 3
                 iter_stats.update({'loss_lms': loss_lms.item()})
 
-            if (eval or self._is_printout_iter()):
+            if eval or self._is_printout_iter():
                 # expensive, so only calculate when every N iterations
                 # X_lm_hm = lmutils.decode_heatmap_blob(X_lm_hm)
                 X_lm_hm = lmutils.smooth_heatmaps(X_lm_hm)
                 lm_preds_max = self.saae.heatmaps_to_landmarks(X_lm_hm)
 
 
-            if (eval or self._is_printout_iter()):
+            if eval or self._is_printout_iter():
                 lm_gt = to_numpy(batch.landmarks)
                 nmes = lmutils.calc_landmark_nme(lm_gt, lm_preds_max, ocular_norm=self.args.ocular_norm,
                                                  image_size=self.args.input_size)
@@ -293,8 +277,8 @@ class AAELandmarkTraining(AAETraining):
             loss_lms.backward()
             self.optimizer_lm_head.step()
             if self.args.train_encoder:
-                self.optimizer_Q.step()
-                # self.optimizer_P.step()
+                self.optimizer_E.step()
+                # self.optimizer_G.step()
 
         # statistics
         iter_stats.update({'epoch': self.epoch, 'timestamp': time.time(),
@@ -306,28 +290,24 @@ class AAELandmarkTraining(AAETraining):
         self.epoch_stats.append(iter_stats)
 
         # print stats every N mini-batches
-        if self._is_printout_iter():
-            self._print_iter_stats(self.epoch_stats[-self.print_interval:])
+        if self._is_printout_iter(eval):
+            self._print_iter_stats(self.epoch_stats[-self._print_interval(eval):])
 
-        # Batch visualization
-        #
-        if self._is_printout_iter():
-            # lmutils.visualize_random_faces(self.saae, 20, 0)
-            landmarks.lmvis.visualize_batch(batch.images, batch.landmarks, X_recon, X_lm_hm, lm_preds_max,
-                                            lm_heatmaps=batch.lm_heatmaps,
-                                            target_images=batch.target_images,
-                                            ds=ds,
-                                            ocular_norm=self.args.ocular_norm,
-                                            clean=False,
-                                            overlay_heatmaps_input=False,
-                                            overlay_heatmaps_recon=False,
-                                            landmarks_only_outline=self.landmarks_only_outline,
-                                            landmarks_no_outline=self.landmarks_no_outline,
-                                            f=1.0,
-                                            wait=self.wait)
+            lmvis.visualize_batch(batch.images, batch.landmarks, X_recon, X_lm_hm, lm_preds_max,
+                                  lm_heatmaps=batch.lm_heatmaps,
+                                  target_images=batch.target_images,
+                                  ds=ds,
+                                  ocular_norm=self.args.ocular_norm,
+                                  clean=False,
+                                  overlay_heatmaps_input=False,
+                                  overlay_heatmaps_recon=False,
+                                  landmarks_only_outline=self.landmarks_only_outline,
+                                  landmarks_no_outline=self.landmarks_no_outline,
+                                  f=1.0,
+                                  wait=self.wait)
 
 
-def run(args):
+def run():
 
     from csl_common.utils.common import init_random
 
@@ -342,7 +322,7 @@ def run(args):
         train = phase == TRAIN
         name = dsnames[0]
         root, cache_root = cfg.get_dataset_paths(name)
-        dataset_cls = cfg.datasets[name]
+        dataset_cls = cfg.get_dataset_class(name)
         datasets[phase] = dataset_cls(root=root,
                                       cache_root=cache_root,
                                       train=train,
@@ -380,11 +360,16 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, lambda x, y: sys.exit(0))
 
     parser = configargparse.ArgParser()
-    aae_training.add_arguments(parser, {'batchsize': 40})
+    defaults = {
+        'batchsize': 40,
+        'train_encoder': False,
+        'train_decoder': False
+    }
+    aae_training.add_arguments(parser, defaults)
 
     # Dataset
     parser.add_argument('--dataset', default=['w300'], type=str, help='dataset for training and testing',
-                        choices=cfg.datasets, nargs='+')
+                        choices=['w300', 'aflw', 'wflw'], nargs='+')
     parser.add_argument('--test-split', default='full', type=str, help='test set split for 300W/AFLW/WFLW',
                         choices=['challenging', 'common', '300w', 'full', 'frontal']+wflw.SUBSETS)
 
@@ -406,4 +391,4 @@ if __name__ == '__main__':
         else:
             args.sessionname = 'debug'
 
-    run(args)
+    run()
