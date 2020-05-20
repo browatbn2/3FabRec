@@ -332,7 +332,7 @@ def draw_z(z_vecs):
     return make_grid(z_zoomed, nCols=len(z_vecs), padsize=1, padval=0).transpose((1,0,2))
 
 
-def overlay_heatmap(img, hm):
+def overlay_heatmap(img, hm, heatmap_opacity=0.45):
     img_dtype = img.dtype
     img_new = img.copy()
     if img_new.dtype == np.uint8:
@@ -351,7 +351,7 @@ def overlay_heatmap(img, hm):
     else:
         # mask = mask > 0.05
         # img_new[mask] = img[mask] * 0.7 + hm_col[mask] * 0.3
-        heatmap_opacity = 0.7
+        # heatmap_opacity = 0.7
         if hm_colored.shape != img.shape:
             hm_colored = cv2.resize(hm_colored, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_CUBIC)
         img_new = img_new + hm_colored * heatmap_opacity
