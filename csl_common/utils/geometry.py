@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 
 def bboxRelOverlap(bbox1, bbox2):
@@ -150,3 +151,30 @@ def convertBB2to1(bb):
     bounding_box[2:] = (bounding_box[2:] - bounding_box[:2]) * 0.5
     bounding_box[:2] = bounding_box[:2] + bounding_box[2:]
     return bounding_box
+
+
+def extend_bbox(bbox, dl=0, dt=0, dr=0, db=0):
+    '''
+    Move bounding box sides by fractions of width/height. Positive values enlarge bbox for all sided.
+    e.g. Enlarge height bei 10 percent by moving top:
+    extend_bbox(bbox, dt=0.1) -> top_new = top - 0.1 * height
+    '''
+    l, t, r, b = bbox
+
+    if t > b:
+        t, b = b, t
+    if l > r:
+        l, r = r, l
+    h = b - t
+    w = r - l
+    assert h >= 0
+    assert w >= 0
+
+    t_new, b_new = int(t - dt * h), int(b + db * h)
+    l_new, r_new = int(l - dl * w), int(r + dr * w)
+
+    return np.array([l_new, t_new, r_new, b_new])
+
+
+def get_diagonal(h):
+    return math.ceil(h * 2**0.5)

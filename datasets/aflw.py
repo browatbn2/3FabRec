@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import torch.utils.data as td
 from csl_common.vis import vis
+from csl_common.utils import geometry
 from datasets import facedataset
 
 
@@ -37,10 +38,6 @@ class AFLW(facedataset.FaceDataset):
     def widths(self):
         return self.annotations.face_w.values
 
-    def get_crop_extend_factors(self):
-        # return 0.05, 0.08
-        return 0.00, 0.00
-
     def _load_annotations(self, split):
         annotation_filename = os.path.join(self.cache_root, 'alfw.pkl')
         self.annotations_original = pd.read_pickle(annotation_filename)
@@ -66,27 +63,23 @@ class AFLW(facedataset.FaceDataset):
         x1, x2, y1, y2 = bbox[:,0], bbox[:,1], bbox[:, 2], bbox[:, 3]
         fnames = [f[0][0] for f in annots['nameList'][ids]]
         annotations_additional = pd.DataFrame({
-                                               'fname':fnames,
-                                               'ra': ids,
-                                               'landmarks_full':lms_list,
-                                               'masks': [m for m in mask_new],
-                                               'face_x': x1,
-                                               'face_y': y1,
-                                               'face_w': x2 - x1,
-                                               'face_h': y2 - y1
-            })
+            'fname':fnames,
+            'ra': ids,
+            'landmarks_full':lms_list,
+            'masks': [m for m in mask_new],
+            'face_x': x1,
+            'face_y': y1,
+            'face_w': x2 - x1,
+            'face_h': y2 - y1
+        })
 
         ad = annotations_additional
         ao = self.annotations_original
 
         # self.annotations_test = self.annotations_original[self.annotations.fname.isin(fnames)]
         pd.set_option('display.expand_frame_repr', False)
-        annotations = pd.merge(ad, ao, on=['fname',
-                                           'face_x',
-                                           'face_y',
-                                           'face_w',
-                                           'face_h'
-                                           ])
+        merge_on=['fname', 'face_x', 'face_y', 'face_w', 'face_h']
+        annotations = pd.merge(ad, ao, on=merge_on)
         annotations = annotations.sort_values('ra')
 
         split_ids = train_ids if train else test_ids
@@ -105,7 +98,7 @@ class AFLW(facedataset.FaceDataset):
     def __getitem__(self, idx):
         sample = self.annotations.iloc[idx]
         face_id = sample.ra
-        bb = self.get_adjusted_bounding_box(sample.face_x, sample.face_y, sample.face_w, sample.face_h)
+        bb = [sample.face_x, sample.face_y, sample.face_x+sample.face_w, sample.y+sample.face_h]
         landmarks = sample.landmarks_full.astype(np.float32)
         landmarks_for_crop = landmarks if self.crop_source == 'lm_ground_truth' else None
         return self.get_sample(sample.fname, bb, landmarks_for_crop=landmarks_for_crop,  id=face_id,

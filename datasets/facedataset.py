@@ -26,7 +26,7 @@ class FaceDataset(ImageDataset):
         return -1
 
     def _crop_landmarks(self, lms):
-         return self.image_loader._cropper.apply_to_landmarks(lms)[0]
+         return self.loader._cropper.apply_to_landmarks(lms)[0]
 
     def get_sample(self, filename, bb=None, landmarks_for_crop=None, id=None, landmarks_to_return=None):
         try:
@@ -36,7 +36,7 @@ class FaceDataset(ImageDataset):
                            'id': id,
                            'aligned': self.align_face_orientation,
                            'mode': crop_mode}
-            image = self.image_loader.load_crop(filename, **crop_params)
+            image = self.loader.load_crop(filename, **crop_params)
         except:
             print('Could not load image {}'.format(filename))
             raise
@@ -50,7 +50,8 @@ class FaceDataset(ImageDataset):
                   'landmarks': relative_landmarks,
                   'pose': np.zeros(3, dtype=np.float32)}
 
-        sample = self.transform(sample)
+        if self.transform is not None:
+            sample = self.transform(sample)
         target = self.target_transform(sample) if self.target_transform else None
 
         # self.show_landmarks(sample['image'], sample['landmarks'])

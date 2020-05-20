@@ -1,27 +1,59 @@
 import os
+import sys
+import math
+import numbers
 
 import numpy as np
-from csl_common.utils import ds_utils, transforms as csl_tf, geometry
+from csl_common.utils import transforms as csl_tf, geometry
+from csl_common.utils import image_loader
 from csl_common.utils.image_loader import CachedCropLoader
-from torch.utils import data as td
 from torchvision import transforms as tf
 import torchvision.datasets as tdv
+import pandas as pd
+
 
 
 class ImageDataset(tdv.VisionDataset):
 
-    def __init__(self, root, fullsize_img_dir, image_size, base_folder='', cache_root=None, train=True,
-                 transform=None, crop_type='tight', color=True, start=None, max_samples=None, deterministic=None, use_cache=True,
-                 with_occlusions=False, test_split='fullset', crop_source='bb_ground_truth', daug=0,
-                 crop_border_mode='black', crop_dir='crops', median_blur_crop=False, **kwargs):
+    def __init__(self, root, fullsize_img_dir, image_size, output_size=None, cache_root=None, train=True,
+                 transform=None, target_transform=None, crop_type='tight', color=True, start=None, max_samples=None,
+                 use_cache=True, test_split='fullset', crop_source='bb_ground_truth', loader=None,
+                 roi_background='black', crop_dir='crops', roi_margin=None, median_blur_crop=False,
+                 **kwargs):
 
         print("Setting up dataset {}...".format(self.__class__.__name__))
 
-        self.image_size = image_size
-        self.crop_size = ds_utils.get_crop_size(image_size)
-        self.crop_dir = crop_dir
-        self.margin = self.crop_size - self.image_size
+        if not isinstance(image_size, numbers.Number):
+            raise FileNotFoundError(f"Image size must be scalar number (image_size={image_size}).")
 
+        if not os.path.exists(root):
+            raise FileNotFoundError(f"Invalid dataset root path: '{root}'")
+
+        if cache_root is not None and not os.path.exists(cache_root):
+            raise FileNotFoundError(f"Invalid dataset cache path: '{cache_root}'")
+
+        if not os.path.exists(root):
+            raise FileNotFoundError(f"Image directory not found: '{root}'")
+
+        self.fullsize_img_dir = fullsize_img_dir
+        self.root = root
+        self.cache_root = cache_root if cache_root is not None else self.root
+
+        self.image_size = image_size
+        if output_size is not None:
+            self.output_size = output_size
+        else:
+            self.output_size = image_size
+
+        if roi_margin is None:
+            # crop size equals input diagonal, so images can be fully rotated
+            self.roi_size = geometry.get_diagonal(image_size)
+            self.margin = self.roi_size - self.image_size
+        else:
+            self.roi_size = image_size + roi_margin
+            self.margin = roi_margin
+
+        self.crop_dir = crop_dir
         self.test_split = test_split
         self.split = 'train' if train else self.test_split
         self.train = train
@@ -30,58 +62,35 @@ class ImageDataset(tdv.VisionDataset):
         self.crop_type = crop_type
         self.start = start
         self.max_samples = max_samples
-        self.daug = daug
-        self.with_occlusions = with_occlusions
-
-        self.deterministic = deterministic
-        if self.deterministic is None:
-            self.deterministic = not self.train
-
-        self.fullsize_img_dir = fullsize_img_dir
-
-        self.root = root
-        self.cache_root = cache_root if cache_root is not None else self.root
-        self.base_folder = base_folder
-
         self.color = color
 
         self.annotations = self._load_annotations(self.split)
-
         self._init()
         self._select_index_range()
 
-        transforms = [csl_tf.CenterCrop(image_size)]
+        transforms = [csl_tf.CenterCrop(self.output_size)]
         transforms += [csl_tf.ToTensor()]
-        transforms += [csl_tf.Normalize([0.518, 0.418, 0.361], [1, 1, 1])]  # VGGFace(2) means
+        transforms += [csl_tf.Normalize()]
         self.crop_to_tensor = tf.Compose(transforms)
 
-        self.image_loader = CachedCropLoader(fullsize_img_dir,
-                                             self.cropped_img_dir,
-                                             img_size=self.image_size,
-                                             margin=self.margin,
-                                             use_cache=self.use_cache,
-                                             crop_type=crop_type,
-                                             border_mode=crop_border_mode,
-                                             median_blur_crop=median_blur_crop)
+        if loader is not None:
+            self.loader = loader
+        else:
+            self.loader = CachedCropLoader(fullsize_img_dir,
+                                           self.cropped_img_dir,
+                                           img_size=self.image_size,
+                                           margin=self.margin,
+                                           use_cache=self.use_cache,
+                                           crop_type=crop_type,
+                                           border_mode=roi_background,
+                                           median_blur_crop=median_blur_crop)
 
-        super().__init__(root,
-                         # transform=ds_utils.build_transform(deterministic, color, daug),
-                         transform=transform,
-                         target_transform=self.build_target_transform())
+        super().__init__(root, transform=transform, target_transform=target_transform)
 
-    @property
-    def feature_dir(self):
-        return os.path.join(self.cache_root, self.base_folder, 'features')
 
     @property
     def cropped_img_dir(self):
         return os.path.join(self.cache_root, self.crop_dir, self.crop_source)
-
-    def build_target_transform(self):
-        transform = None
-        if self.with_occlusions:
-            transform = tf.Compose([csl_tf.RandomOcclusion()])
-        return transform
 
     def _init(self):
         pass
@@ -122,56 +131,27 @@ class ImageDataset(tdv.VisionDataset):
     def labels(self):
         return NotImplemented
 
-    def get_crop_extend_factors(self):
-        return 0, 0
-
-    def get_adjusted_bounding_box(self, l, t, w, h):
-        r, b = l + w, t + h
-
-        # enlarge bounding box
-        if t > b:
-            t, b = b, t
-        h = b-t
-        assert(h >= 0)
-        extend_top, extend_bottom = self.get_crop_extend_factors()
-        t_new, b_new = int(t - extend_top * h), int(b + extend_bottom * h)
-
-        h_new = b_new - t_new
-        # set width of bbox same as height
-        size = w if w > h_new else h_new
-        cx = (r + l) / 2
-        cy = (t_new + b_new) / 2
-        l_new, r_new = cx - size/2, cx + size/2
-        t_new, b_new = cy - size/2, cy + size/2
-
-        # in case right eye is actually left of right eye...
-        if l_new > r_new:
-            l_new, r_new = r_new, l_new
-
-        # extend area by crop border margins
-        bbox = np.array([l_new, t_new, r_new, b_new], dtype=np.float32)
-        scalef = self.crop_size / self.image_size
-        bbox_crop = geometry.scaleBB(bbox, scalef, scalef, typeBB=2)
-        return bbox_crop
-
+    def _get_image_roi_from_bbox(self, bbox):
+        return image_loader.get_roi_from_bbox(bbox, crop_size=self.image_size, margin=self.margin)
 
     def get_sample(self, filename, bb=None, landmarks_for_crop=None, id=None):
-
+        image_roi = self._get_image_roi_from_bbox(bb)
         try:
-            image  = self.image_loader.load_crop(filename, bb=bb, id=id)
+            image  = self.loader.load_crop(filename, bb=image_roi, id=id)
         except:
             print('Could not load image {}'.format(filename))
             raise
 
-        sample = self.transform(image)
-        target = self.target_transform(sample.copy()) if self.target_transform else None
+        if self.transform is not None:
+            image = self.transform(image)
+        target = self.target_transform(image.copy()) if self.target_transform else None
 
         if self.crop_type != 'fullsize':
-            sample = self.crop_to_tensor(sample)
+            image = self.crop_to_tensor(image)
             if target is not None:
                 target = self.crop_to_tensor(target)
 
-        sample = ({ 'image': sample,
+        sample = ({ 'image': image,
                     'fnames': filename,
                     'bb': bb if bb is not None else [0,0,0,0]})
 
@@ -179,3 +159,45 @@ class ImageDataset(tdv.VisionDataset):
             sample['target'] = target
 
         return sample
+
+
+
+class ImageFolderDataset(ImageDataset):
+    def __init__(self, root, fullsize_img_dir, image_size, **kwargs):
+        super().__init__(root, fullsize_img_dir, image_size, **kwargs)
+
+    def _find_classes(self, dir):
+        """
+        Finds the class folders in a dataset.
+
+        Args:
+            dir (string): Root directory path.
+
+        Returns:
+            tuple: (classes, class_to_idx) where classes are relative to (dir), and class_to_idx is a dictionary.
+
+        Ensures:
+            No class is a subdirectory of another.
+        """
+        if sys.version_info >= (3, 5):
+            # Faster and available in Python 3.5 and above
+            classes = [d.name for d in os.scandir(dir) if d.is_dir()]
+        else:
+            classes = [d for d in os.listdir(dir) if os.path.isdir(os.path.join(dir, d))]
+        classes.sort()
+        class_to_idx = {classes[i]: i for i in range(len(classes))}
+        return classes, class_to_idx
+
+    def _load_annotations(self, split):
+        def strip_root(fullpath, root):
+            return os.path.relpath(fullpath, root)
+
+        from torchvision.datasets import folder
+        classes, class_to_idx = self._find_classes(self.root)
+        samples = folder.make_dataset(self.root, class_to_idx, extensions=folder.IMG_EXTENSIONS)
+        self.classes = classes
+        self.class_to_ids = class_to_idx
+        fnames = [strip_root(s[0], self.root) for s in samples]
+        labels = [s[1] for s in samples]
+        ann = pd.DataFrame({'fname': fnames, 'label': labels})
+        return ann

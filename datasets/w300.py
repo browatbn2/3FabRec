@@ -3,7 +3,9 @@ import numpy as np
 import torch.utils.data as td
 import pandas as pd
 
+import config
 from csl_common.utils.nn import Batch
+from csl_common.utils import geometry
 from datasets import facedataset
 
 
@@ -127,31 +129,34 @@ class W300(facedataset.FaceDataset):
     def labels(self):
         return None
 
-    def get_crop_extend_factors(self):
-        return 0.2, 0.12
-
     def __len__(self):
         return len(self.annotations)
 
     def __getitem__(self, idx):
         sample = self.annotations.iloc[idx]
         bb = sample.bb_detector if self.crop_source == 'bb_detector' else sample.bb_ground_truth
-        l,t,r,b = bb
-        bb = self.get_adjusted_bounding_box(l, t, w=r-l, h=b-t)
-        landmarks_for_crop = sample.landmarks.astype(np.float32) if self.crop_source == 'lm_ground_truth' else None
-        return self.get_sample(sample.fname, bb, landmarks_for_crop, landmarks_to_return=sample.landmarks)
+        bb = geometry.extend_bbox(bb, dt=0.2, db=0.12)
+        landmarks =  sample.landmarks.astype(np.float32)
+        landmarks_for_crop = None
+        if self.crop_source == 'lm_ground_truth':
+            landmarks_for_crop = landmarks
+        return self.get_sample(sample.fname, bb, landmarks_for_crop, landmarks_to_return=landmarks)
+
+
+config.register_dataset(W300)
 
 
 if __name__ == '__main__':
-    from vis import vis
+    from csl_common.vis import vis
     import torch
+    import config
 
     torch.manual_seed(0)
     torch.cuda.manual_seed_all(0)
 
-    ds = W300(train=False, deterministic=True, use_cache=False, image_size=256,
-              test_split='challenging', daug=0, align_face_orientation=True,
-              return_modified_images=False, crop_source='lm_ground_truth')
+    dirs = config.get_dataset_paths('w300')
+    ds = W300(root=dirs[0], cache_root=dirs[1], train=False, deterministic=True, use_cache=False, image_size=256,
+              test_split='challenging', daug=0, align_face_orientation=True, crop_source='lm_ground_truth')
     dl = td.DataLoader(ds, batch_size=10, shuffle=False, num_workers=0)
 
     for data in dl:

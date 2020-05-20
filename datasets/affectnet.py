@@ -4,9 +4,11 @@ import numpy as np
 import torch.utils.data as td
 import pandas as pd
 
+from csl_common.utils import geometry
 from csl_common.utils import ds_utils
 from csl_common.utils.nn import to_numpy, Batch
 from datasets import facedataset
+import config as cfg
 
 CLASS_NAMES = ['Neutral', 'Happy', 'Sad', 'Surprise', 'Fear', 'Disgust', 'Anger', 'Contempt']
 MAX_IMAGES_PER_EXPRESSION = None
@@ -132,11 +134,14 @@ class AffectNet(facedataset.FaceDataset):
     def __getitem__(self, idx):
         sample = self.annotations.iloc[idx]
         filename = sample.subDirectory_filePath
-        bb = self.get_adjusted_bounding_box(sample.face_x, sample.face_y, sample.face_width, sample.face_height)
+        bb = [sample.face_x, sample.face_y, sample.face_width, sample.face_height]
+        bb = geometry.extend_bbox(bb, dt=0.05, db=0.25)
         landmarks_to_return = self.parse_landmarks(sample.facial_landmarks)
         landmarks_for_crop = landmarks_to_return if self.crop_source == 'lm_ground_truth' else None
         return self.get_sample(filename, bb, landmarks_for_crop, landmarks_to_return=landmarks_to_return)
 
+
+cfg.register_dataset(AffectNet)
 
 
 if __name__ == '__main__':

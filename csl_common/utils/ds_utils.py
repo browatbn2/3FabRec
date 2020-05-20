@@ -1,5 +1,4 @@
 import os
-import math
 
 import numpy as np
 import pandas as pd
@@ -12,13 +11,6 @@ from csl_common.utils.io_utils import makedirs
 # To avoid exceptions when loading truncated image files
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-
-
-def get_crop_size(cnn_input_size):
-    return math.ceil(cnn_input_size * 2**0.5)  # crop size equals input diagonal, so images can be fully rotated
-
-def get_crop_border_width(cnn_input_size):
-    return (get_crop_size(cnn_input_size) - cnn_input_size) // 2
 
 
 def read_openface_detection(lmFilepath, numpy_lmFilepath=None, from_sequence=False, use_cache=True,
@@ -107,7 +99,7 @@ def build_transform(deterministic, color=True, daug=0):
         elif daug == 2:
             transforms += [csl_tf.RandomAffine(3, translate=[0.035, 0.035], scale=[0.970, 1.030], shear=2, keep_aspect=False)]
         elif daug == 3:
-            transforms += [csl_tf.RandomAffine(20, translate=[0.035, 0.035], scale=[0.970, 1.030], shear=5, keep_aspect=False)]
+            transforms += [csl_tf.RandomAffine(20, translate=[0.035, 0.035], scale=[0.970, 1.030], shear=0, keep_aspect=False)]
         elif daug == 4:
             transforms += [csl_tf.RandomAffine(45, translate=[0.035, 0.035], scale=[0.940, 1.030], shear=5, keep_aspect=False)]
         elif daug == 5:

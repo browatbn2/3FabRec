@@ -4,9 +4,10 @@ import numpy as np
 import torch.utils.data as td
 import pandas as pd
 
-from csl_common.utils import log, cropping, ds_utils
+from csl_common.utils import log, cropping, ds_utils, geometry
 from csl_common.vis import vis
 from datasets import facedataset
+import config as cfg
 
 
 class VggFace2(facedataset.FaceDataset):
@@ -129,9 +130,14 @@ class VggFace2(facedataset.FaceDataset):
 
     def __getitem__(self, idx):
         sample = self.annotations.iloc[idx]
-        bb = self.get_adjusted_bounding_box(sample.X, sample.Y, sample.W, sample.H)
+        # bb = self.get_adjusted_bounding_box(sample.X, sample.Y, sample.W, sample.H)
+        bb = [sample.X, sample.Y, sample.X+sample.W, sample.Y+sample.H]
+        bb = geometry.extend_bbox(bb, dt=0.05, db=0.10)
         landmarks_for_crop = sample.landmarks.astype(np.float32) if self.crop_source == 'lm_ground_truth' else None
         return self.get_sample(sample.NAME_ID+'.jpg', bb, landmarks_for_crop)
+
+
+cfg.register_dataset(VggFace2)
 
 
 def extract_features(split, st=None, nd=None):

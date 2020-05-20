@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import numbers
 
 from csl_common.utils import geometry
 from skimage import exposure
@@ -30,6 +31,8 @@ class FaceCrop():
         if crop_by_eye_mouth_dist and crop_by_height:
             raise ValueError("'crop_by_eye_mouth_dist' and 'crop_by_height' cannot both be true. "
                              "Default: crop_by_height=True.")
+        if isinstance(output_size, numbers.Number):
+            output_size = (output_size, output_size)
         self.output_size = output_size
         self.align_face_orientation = align_face_orientation
         self.img_already_cropped = img_already_cropped

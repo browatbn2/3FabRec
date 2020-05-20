@@ -2,9 +2,12 @@ import os
 import numpy as np
 import torch.utils.data as td
 import pandas as pd
+import config
+from csl_common.utils import geometry
 from datasets.facedataset import FaceDataset
 
 SUBSETS = ['pose', 'illumination', 'expression', 'make-up', 'occlusion', 'blur']
+
 
 class WFLW(FaceDataset):
 
@@ -18,13 +21,10 @@ class WFLW(FaceDataset):
         super().__init__(root=root, cache_root=cache_root, fullsize_img_dir=fullsize_img_dir,
                          return_landmark_heatmaps=return_landmark_heatmaps, **kwargs)
 
-    def init(self):
+    def _init(self):
         if not self.train:
             if self.test_split in SUBSETS:
                 self.filter_labels({self.test_split:1})
-
-    def get_crop_extend_factors(self):
-        return 0.0, 0.1
 
     def parse_groundtruth_txt(self, gt_txt_file):
         num_lm_cols = self.NUM_LANDMARKS * 2
@@ -75,11 +75,15 @@ class WFLW(FaceDataset):
 
     def __getitem__(self, idx):
         sample = self.annotations.iloc[idx]
-        bb = self.get_adjusted_bounding_box(sample.x, sample.y, sample.w, sample.h)
+        bb = [sample.x, sample.y, sample.x+sample.w, sample.y+sample.h]
+        bb = geometry.extend_bbox(bb, db=0.1)
         face_id = int(sample.name)
         landmarks_for_crop = sample.landmarks.astype(np.float32) if self.crop_source == 'lm_ground_truth' else None
         return self.get_sample(sample.fname, landmarks_for_crop=landmarks_for_crop, bb=bb, id=face_id,
                                landmarks_to_return=sample.landmarks.astype(np.float32))
+
+
+config.register_dataset(WFLW)
 
 
 if __name__ == '__main__':
@@ -91,11 +95,11 @@ if __name__ == '__main__':
 
     init_random(3)
 
-    dir = config.get_dataset_paths('wflw')[0]
-    ds = WFLW(root=dir, train=True, deterministic=True, use_cache=True, daug=0, image_size=256,
-              transform=build_transform(deterministic=False, daug=4))
-    # ds.filter_labels({'pose':0, 'blur':0, 'occlusion':1})
-    dl = td.DataLoader(ds, batch_size=1, shuffle=False, num_workers=0)
+    path = config.get_dataset_paths('wflw')[0]
+    ds = WFLW(root=path, train=False, deterministic=True, use_cache=False, daug=0, image_size=256,
+              transform=build_transform(deterministic=False, daug=0))
+    ds.filter_labels({'pose': 1, 'occlusion':0, 'make-up':1})
+    dl = td.DataLoader(ds, batch_size=10, shuffle=False, num_workers=0)
     print(ds)
 
     for data in dl:
@@ -104,4 +108,4 @@ if __name__ == '__main__':
         # lms = lmutils.convert_landmarks(to_numpy(batch.landmarks), lmutils.LM98_TO_LM68)
         lms = batch.landmarks
         images = vis.add_landmarks_to_images(images, lms, draw_wireframe=False, color=(0,255,0), radius=3)
-        vis.vis_square(images, nCols=1, fx=1., fy=1., normalize=False)
+        vis.vis_square(images, nCols=10, fx=1., fy=1., normalize=False)

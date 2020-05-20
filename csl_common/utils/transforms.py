@@ -534,7 +534,7 @@ class RandomAffine(object):
 
         return angle, translations, (scale_x, scale_y), shear
 
-    def __get_full_matrix(self, angle, translations, scales, shear, img_size):
+    def _get_full_matrix(self, angle, translations, scales, shear, img_size):
         M = skimage.transform.AffineTransform(
             rotation=np.deg2rad(angle),
             translation=translations,
@@ -551,7 +551,7 @@ class RandomAffine(object):
             img = sample
 
         angle, translations, scale, shear = self.get_params(img.shape[:2])
-        M = self.__get_full_matrix(angle, translations, scale, shear, img.shape[:2])
+        M = self._get_full_matrix(angle, translations, scale, shear, img.shape[:2])
         img_new = transform_image(img, M)
 
         if isinstance(sample, dict):
@@ -712,7 +712,11 @@ class Normalize(object):
         std (sequence): Sequence of standard deviations for each channel.
     """
 
-    def __init__(self, mean, std):
+    def __init__(self, mean=None, std=None):
+        if mean is None:
+            mean = [0.518, 0.418, 0.361] # VGGFace(2) means
+        if std is None:
+            std = [1, 1, 1]
         self.mean = mean
         self.std = std
 

@@ -2,25 +2,58 @@ import os
 from skimage import io
 import numpy as np
 import cv2
-from csl_common.utils import cropping
+from csl_common.utils import cropping, geometry
 from csl_common.utils.io_utils import makedirs
 import numbers
 
 FILE_EXT_CROPS = '.jpg'
 
 
+def get_bbox_non_black_area(img, tol=20):
+    img_filtered = cv2.medianBlur(img, 5)
+    mask =  img_filtered.max(axis=2) > tol
+    inds = np.nonzero(mask)
+    t, b = inds[0].min(), inds[0].max()
+    l, r = inds[1].min(), inds[1].max()
+    return np.array([l,t,r,b])
+
+
+def get_roi_from_bbox(bbox, crop_size, margin):
+
+    if bbox is None:
+        return bbox
+
+    l, t, r, b = bbox
+    w = r - l
+    h = b - t
+
+    # set width of bbox same as height
+    size = w if w > h else h
+    cx = (r + l) / 2
+    cy = (t + b) / 2
+    l_new, r_new = cx - size / 2, cx + size / 2
+    t_new, b_new = cy - size / 2, cy + size / 2
+
+    if l_new > r_new:
+        l_new, r_new = r_new, l_new
+
+    bbox = np.array([l_new, t_new, r_new, b_new], dtype=np.float32)
+
+    # extend bbox so that (final resized) crops will contain border area specified by margin
+    scalef = (crop_size + margin) / crop_size
+    crop_roi = geometry.scaleBB(bbox, scalef, scalef, typeBB=2)
+    return crop_roi
+
+
 class ImageLoader():
-    def __init__(self, fullsize_img_dir, img_size, margin, border_mode='black'):
+    def __init__(self, fullsize_img_dir, img_size,  border_mode='black'):
         assert border_mode in ['black', 'edge', 'mirror']
         self.fullsize_img_dir = fullsize_img_dir
         self.border_mode = border_mode
-        if isinstance(img_size, numbers.Number):
-            img_size = (img_size, img_size)
-        self.input_size = img_size
-        assert len(img_size) == 2
-        self.size = img_size[0] + margin
-        if isinstance(self.size, numbers.Number):
-            self.size = (self.size, self.size)
+        if not isinstance(img_size, numbers.Number):
+            raise ValueError("img_size must be a scalar value. "
+                             "Only square crops are supported at the moment.")
+        self.image_size = int(img_size)
 
     def load_image(self, filename):
         """ Load original image from dataset """
@@ -39,16 +72,23 @@ class ImageLoader():
 
 
 class CachedCropLoader(ImageLoader):
-    def __init__(self, fullsize_img_dir, cropped_img_root, crop_type,
+    def __init__(self, fullsize_img_dir, cropped_img_root, crop_type, margin,
                  use_cache=True, median_blur_crop=False, **kwargs):
+
+        if crop_type not in ['fullsize', 'tight']:
+            raise ValueError(f"Invalid crop_type {crop_type}.")
+
+        super().__init__(fullsize_img_dir, **kwargs)
+
         self.cropped_img_root = cropped_img_root
         self.median_blur_crop = median_blur_crop
         self.crop_type = crop_type
         self.use_cache = use_cache
-        super().__init__(fullsize_img_dir, **kwargs)
+        self.margin = int(margin)
+        self.roi_size = self.image_size + self.margin
 
     def _cache_filepath(self, filename, id, aligned):
-        imgsize_dirname = str(int(self.input_size[0]))
+        imgsize_dirname = str(self.image_size)
         crop_dir = self.crop_type
         if not aligned:
             crop_dir += '_noalign'
@@ -90,10 +130,16 @@ class CachedCropLoader(ImageLoader):
             return img
 
         if mode == 'bounding_box':
-            self._cropper = cropping.FaceCrop(img, output_size=self.size, bbox=bb,
+            if bb is None:
+                bb = np.array([0, 0, img.shape[1] - 1, img.shape[0] - 1])
+                if not is_cached_crop:
+                    bb = get_bbox_non_black_area(img)
+
+            roi = get_roi_from_bbox(bb, crop_size=self.image_size, margin=self.margin)
+            self._cropper = cropping.FaceCrop(img, output_size=self.roi_size, bbox=roi,
                                               img_already_cropped=is_cached_crop)
         else:
-            self._cropper = cropping.FaceCrop(img, output_size=self.size, landmarks=landmarks,
+            self._cropper = cropping.FaceCrop(img, output_size=self.roi_size, landmarks=landmarks,
                                               align_face_orientation=aligned,
                                               img_already_cropped=is_cached_crop)
 
