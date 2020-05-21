@@ -190,13 +190,13 @@ If show is True (default), visualizations will also shown on screen:
 To train, for example, the previous autoencoder model on landmarks from the 300-W dataset:
 
 ```
-python train_aae_landmarks.py --sessionname lms_300w -r my_model/00003 --dataset 300w 
+python train_aae_landmarks.py --sessionname lms_300w -r my_model/00003 --dataset w300
 ```
 
 **Finetune encoder `--train-encoder 1`:**
 
 ```
-python train_aae_landmarks.py --sessionname lms_300w -r my_model/00003 --dataset 300w  --train-encoder 1
+python train_aae_landmarks.py --sessionname lms_300w -r my_model/00003 --dataset w300  --train-encoder 1
 ```
 
 ### Training landmark detection (few show)
@@ -204,7 +204,7 @@ python train_aae_landmarks.py --sessionname lms_300w -r my_model/00003 --dataset
 Train using 50 images from 300-W:
 
 ```
-python train_aae_landmarks.py --sessionname lms_300w_50 -r my_model/00003 --dataset 300w --train-count 50 --
+python train_aae_landmarks.py --sessionname lms_300w_50 -r my_model/00003 --dataset w300 --train-count 50 
 ```
 
 Please note: For very low image counts (<50), encoder finetuning only leads to small performance gains and might even result in overfitting (worse performace).
@@ -246,18 +246,12 @@ The second figure shows ground truth heatmaps and predicted heatmaps for the sam
 
 ### Benchmark performance
 
-To evaluate performance on the entire test set, switch to benchmark mode (`--benchmark`). To run on a specific subset use param `--test-split`.
+To evaluate performance on the entire test set, switch to benchmark mode: --benchmark`. To run on a specific subset use param `--test-split SPLITNAME`.
 
 ```
 python eval_aae_landmarks.py -r lms_wflw --dataset wflw --test-split make-up --benchmark
 ```
 
-```
-...
-[2020-05-20 18:08:07] NME:    6.125
-[2020-05-20 18:08:07] FR@10: 10.680 (22)
-[2020-05-20 18:08:07] AUC:   0.4461
-```
 
 
 ## Citation
