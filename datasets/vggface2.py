@@ -35,7 +35,9 @@ class VggFace2(facedataset.FaceDataset):
 
         self.min_face_height = min_face_height
 
-        # self.feature_dir = os.path.join(root_dir_local, split_subfolder, 'features')
+        # shuffle images since dataset is sorted by identities
+        import sklearn.utils
+        self.annotations = sklearn.utils.shuffle(self.annotations)
 
         print("Removing faces with height <= {:.2f}px...".format(self.min_face_height))
         self.annotations = self.annotations[self.annotations.H > self.min_face_height]
@@ -59,38 +61,6 @@ class VggFace2(facedataset.FaceDataset):
         annotations = pd.read_csv(self.ann_csv_file)
         print(f'{len(annotations)} lines read.')
 
-        # annotations = annotations[annotations.H > 80]
-        # print("Number of images: {}".format(len(self)))
-        # def get_face_height(lms):
-        #     return lms[8,1] - lms[27,1]
-
-        read_openface_landmarks = False
-        if read_openface_landmarks:
-            of_confs, poses, landmarks = [], [], []
-            for cnt, filename in enumerate(self.annotations.NAME_ID):
-                filename_noext = os.path.splitext(filename)[0]
-
-                bb = annotations.iloc[cnt][1:5].values
-                expected_face_center = [bb[0] + bb[2] / 2.0, bb[1] + bb[3] / 2.0]
-
-                conf, lms, pose, num_faces  = ds_utils.read_openface_detection(os.path.join(self.feature_dir, filename_noext),
-                                                                               expected_face_center=expected_face_center,
-                                                                               use_cache=True, return_num_faces=True)
-                if num_faces > 1:
-                    print("Deleting extracted crop for {}...".format(filename))
-                    cache_filepath = os.path.join(self.cropped_img_dir, 'tight', filename + '.jpg')
-                    if os.path.isfile(cache_filepath):
-                        os.remove(cache_filepath)
-
-                of_confs.append(conf)
-                landmarks.append(lms)
-                poses.append(pose)
-                if (cnt+1) % 10000 == 0:
-                    log.info(cnt+1)
-            annotations['pose'] = poses
-            annotations['of_conf'] = of_confs
-            annotations['landmarks_of'] = landmarks
-
         # assign new continuous ids to persons (0, range(n))
         print("Creating id labels...")
         _ids = annotations.NAME_ID
@@ -98,7 +68,6 @@ class VggFace2(facedataset.FaceDataset):
         annotations['ID'] = _ids
 
         return annotations
-
 
     def _load_annotations(self, split):
         path_annotations_mod = os.path.join(self.cache_root, self.annotation_filename + '.mod_full.pkl')
