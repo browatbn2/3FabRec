@@ -76,7 +76,7 @@ Image crops and metadata are created automatically when loading original images 
 To train a basic model on VGGFace2 and AffectNet with image size of 256x256 and standard data augmentations, run:
 
 ```
-python train_aae_unsupervised.py --sessionname my_model --daug 4 --dataset-train vggface2 affectnet --input-size 256 --epochs 1 
+python train_aae_unsupervised.py --sessionname my_model --daug 4 --dataset-train vggface2 affectnet --input-size 256 --epoch 1 
 ``` 
 
 ```
@@ -149,13 +149,13 @@ Eventually the reconstructions become more accurate but remain blurry.
 Next, add a GAN to make images more realistic. Train for one more epoch:
 
 ```
-python train_aae_unsupervised.py -r my_model/00001 --with-gan 1 --daug 4 --epochs 2
+python train_aae_unsupervised.py -r my_model/00001 --with-gan 1 --daug 4 --epoch 2
 ``` 
 
 Finally, we can add the structural image loss to better align facial structures in reconstructions and suppress GAN artefacts:
 
 ```
-python train_aae_unsupervised.py -r my_model/00002 --with-gan 1 --with-ssim-loss 1 --daug 4 --epochs 3
+python train_aae_unsupervised.py -r my_model/00002 --with-gan 1 --with-ssim-loss 1 --daug 4 --epoch 3
 ``` 
 We have now trained for a total of 3 epochs (3 x 2.1Mio images). Images should start to look ok now but will keep improving when training longer. Aim for 50-100 epochs for optimal results. It will take a few days... :)  
 
@@ -224,9 +224,9 @@ python eval_aae_landmarks.py -r lms_wflw --dataset wflw
 [2020-05-20 17:26:04] Resuming session lms_wflw from snapshot lms_wflw/00150...
 [2020-05-20 17:26:04] Model lms_wflw/00150 trained for 2589834 iterations (7 days, 8:43:24).
 [2020-05-20 17:26:04] 
-[2020-05-20 17:26:04] Starting evaluation of 'lms_wflw'...
+[2020-05-20 17:26:04] Evaluating 'lms_wflw'...
 [2020-05-20 17:26:04] 
-[2020-05-20 17:26:05] [151][(1/20] l_rec=14.215 ssim=2.000 l_lms=0.2655 err_lms=3.52/6.46/4.51 0.14/0.42/0.56s (2589835 0:00:00)
+[2020-05-20 17:26:05] [151][(1/20] l_rec=14.215 l_lms=0.2655 err_lms=3.52/6.46/4.51 0.14/0.42/0.56s (2589835 0:00:00)
 ...
 ```
 
@@ -251,7 +251,6 @@ To evaluate performance on the entire test set, switch to benchmark mode: --benc
 ```
 python eval_aae_landmarks.py -r lms_wflw --dataset wflw --test-split make-up --benchmark
 ```
-
 
 
 ## Citation
