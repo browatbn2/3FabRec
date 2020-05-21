@@ -24,7 +24,6 @@ def get_registered_dataset_names():
 _default_config_files = [
     './local_config.ini',
     '../local_config.ini',
-    '/home/browatbn/dev/csl/faces/local_config.ini'
 ]
 
 
@@ -64,17 +63,8 @@ def read_local_config():
     _parser = configargparse.ArgParser(default_config_files=_default_config_files)
     _parser.add_argument(f'--data', default='./data', type=str, metavar='PATH')
     _parser.add_argument(f'--outputs', default='./outputs', type=str, metavar='PATH')
-
     _paths = _parser.parse_known_args()[0]
     return _paths
-
-
-def get_neptune_token():
-    import configargparse
-    _parser = configargparse.ArgParser(default_config_files=_default_config_files)
-    _parser.add_argument('--neptune-token', default=None, type=str,  help='Neptune.ai API token for logging')
-    _args = _parser.parse_known_args()[0]
-    return _args.neptune_token
 
 
 _paths = read_local_config()
