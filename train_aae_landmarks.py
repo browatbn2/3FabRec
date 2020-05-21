@@ -68,6 +68,11 @@ class AAELandmarkTraining(AAETraining):
             log.info('NME:   {:>6.3f}'.format(nmes.mean()*err_scale))
             log.info('FR@10: {:>6.3f} ({})'.format(fr*100, np.sum(nmes.mean(axis=1) > 10)))
             log.info('AUC:   {:>6.4f}'.format(auc(Y)))
+            # log.info('NME:   {nme:>6.3f}, FR@10: {fr:>6.3f} ({fc}), AUC:   {auc:>6.4f}'.format(
+            #     nme=nmes.mean()*err_scale,
+            #     fr=fr*100,
+            #     fc=np.sum(nmes.mean(axis=1) > 10),
+            #     auc=auc(Y)))
 
             if show:
                 import matplotlib.pyplot as plt
@@ -83,9 +88,9 @@ class AAELandmarkTraining(AAETraining):
         current = stats[-1]
         nmes = current.get('nmes', np.zeros(0))
 
-        str_stats = ['[{ep}][({i}/{iters_per_epoch}] '
+        str_stats = ['[{ep}][{i}/{iters_per_epoch}] '
                      'l_rec={avg_loss_recon:.3f} '
-                     'ssim={avg_ssim:.3f} '
+                     # 'ssim={avg_ssim:.3f} '
                      # 'ssim_torch={avg_ssim_torch:.3f} '
                      # 'z_mu={avg_z_recon_mean: .3f} '
                      'l_lms={avg_loss_lms:.4f} '
@@ -111,7 +116,7 @@ class AAELandmarkTraining(AAETraining):
         ))
 
 
-    def _print_epoch_summary(self, epoch_stats, epoch_starttime):
+    def _print_epoch_summary(self, epoch_stats, epoch_starttime, eval=False):
         means = pd.DataFrame(epoch_stats).mean().to_dict()
 
         try:
@@ -120,14 +125,14 @@ class AAELandmarkTraining(AAETraining):
             nmes = np.zeros((1,100))
 
         duration = int(time.time() - epoch_starttime)
-        log.info("{}".format('-' * 120))
-        str_stats = ['Train:       '
+        log.info("{}".format('-' * 100))
+        str_stats = ['           '
                      'l_rec={avg_loss_recon:.3f} '
-                     'ssim={avg_ssim:.3f} '
+                     # 'ssim={avg_ssim:.3f} '
                      # 'ssim_torch={avg_ssim_torch:.3f} '
                      # 'z_mu={avg_z_recon_mean:.3f} '
                      'l_lms={avg_loss_lms:.4f} '
-                     'err_lms={avg_err_lms:.3f}/{avg_err_lms_outline:.3f}/{avg_err_lms_all:.3f} '
+                     'err_lms={avg_err_lms:.2f}/{avg_err_lms_outline:.2f}/{avg_err_lms_all:.2f} '
                      '\tT: {time_epoch}'][0]
         log.info(str_stats.format(
             iters_per_epoch=self.iters_per_epoch,
@@ -155,13 +160,14 @@ class AAELandmarkTraining(AAETraining):
             pass
 
         if self.args.eval and nmes is not None:
-            self.print_eval_metrics(nmes, show=self.args.benchmark)
+            benchmark_mode = hasattr(self.args, 'benchmark')
+            self.print_eval_metrics(nmes, show=benchmark_mode)
 
 
     def eval_epoch(self):
         log.info("")
-        log.info("Starting evaluation of '{}'...".format(self.session_name))
-        log.info("")
+        log.info("Evaluating '{}'...".format(self.session_name))
+        # log.info("")
 
         epoch_starttime = time.time()
         self.epoch_stats = []
@@ -176,7 +182,7 @@ class AAELandmarkTraining(AAETraining):
 
         log.info("")
         log.info("Starting training session '{}'...".format(self.session_name))
-        log.info("")
+        # log.info("")
 
         while num_epochs is None or self.epoch < num_epochs:
             log.info('')
@@ -202,11 +208,10 @@ class AAELandmarkTraining(AAETraining):
             self.epoch += 1
 
         time_elapsed = time.time() - self.time_start_training
-        print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
+        log.info('Training completed in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
 
     def _run_epoch(self, dataset, eval=False):
         batchsize = self.args.batchsize_eval if eval else self.args.batchsize
-
         self.iters_per_epoch = int(len(dataset) / batchsize)
         self.iter_starttime = time.time()
         self.iter_in_epoch = 0
@@ -257,14 +262,14 @@ class AAELandmarkTraining(AAETraining):
                 loss_lms = F.mse_loss(batch.lm_heatmaps, X_lm_hm) * 100 * 3
                 iter_stats.update({'loss_lms': loss_lms.item()})
 
-            if eval or self._is_printout_iter():
+            if eval or self._is_printout_iter(eval):
                 # expensive, so only calculate when every N iterations
                 # X_lm_hm = lmutils.decode_heatmap_blob(X_lm_hm)
                 X_lm_hm = lmutils.smooth_heatmaps(X_lm_hm)
                 lm_preds_max = self.saae.heatmaps_to_landmarks(X_lm_hm)
 
 
-            if eval or self._is_printout_iter():
+            if eval or self._is_printout_iter(eval):
                 lm_gt = to_numpy(batch.landmarks)
                 nmes = lmutils.calc_landmark_nme(lm_gt, lm_preds_max, ocular_norm=self.args.ocular_norm,
                                                  image_size=self.args.input_size)

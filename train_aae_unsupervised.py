@@ -35,7 +35,7 @@ class AAEUnsupervisedTraining(AAETraining):
         current = stats[-1]
         ssim_scores = current['ssim'].mean()
 
-        str_stats = ['[{ep}][({i}/{iters_per_epoch}] '
+        str_stats = ['[{ep}][{i}/{iters_per_epoch}] '
                      'l={avg_loss:.3f}  '
                      'l_rec={avg_loss_recon:.3f} '
                      'l_ssim={avg_ssim_torch:.3f}({avg_ssim:.2f}) '
@@ -189,7 +189,7 @@ class AAEUnsupervisedTraining(AAETraining):
             self.epoch += 1
 
         time_elapsed = time.time() - self.time_start_training
-        print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
+        log.info('Training completed in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
 
 
     def _run_epoch(self, dataset, eval=False):

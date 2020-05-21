@@ -87,8 +87,6 @@ def loss_struct(X, X_recon, torch_ssim, calc_error_maps=False, reduction='mean')
         errs[i] = 1.0 - torch_ssim(X[i].unsqueeze(0), X_recon[i].unsqueeze(0))
         if calc_error_maps:
             cs_error_maps.append(1.0 - to_numpy(torch_ssim.cs_map))
-    # if len(cs_error_maps) == 0:
-    #     cs_error_maps = None
     loss = __reduce(errs, reduction)
     if calc_error_maps:
         return loss, np.vstack(cs_error_maps)
@@ -115,15 +113,6 @@ def weights_init(m):
         torch.nn.init.xavier_uniform(m)
     if isinstance(m, torch.nn.Conv2d):
         torch.nn.init.xavier_uniform(m.weight)
-
-
-def visualize_middle_activations(xa, xb):
-    fig, ax = plt.subplots(1,2)
-    imga = vis.make_grid(to_numpy(xa[0, :36]), nCols=6)
-    imgb = vis.make_grid(to_numpy(xb[0, :36]), nCols=6)
-    ax[0].imshow(imga)
-    ax[1].imshow(imgb)
-    plt.show()
 
 
 class AAETraining(object):
@@ -463,7 +452,6 @@ class AAETraining(object):
 
         rows.append(vis.make_grid(disp_X_recon, nCols=nimgs))
 
-
         if ssim_maps is not None:
             disp_ssim_maps = to_numpy(nn.denormalized(ssim_maps)[:nimgs].transpose(0, 2, 3, 1))
             for i in range(len(disp_ssim_maps)):
@@ -483,44 +471,12 @@ class AAETraining(object):
         cv2.imshow(wnd_title, cv2.cvtColor(disp_rows, cv2.COLOR_RGB2BGR))
         cv2.waitKey(wait)
 
-    # def visualize_activations(self):
-    #     out_dir = os.path.join(cfg.REPORT_DIR, 'activations')
-    #     img_id = 0
-    #     with torch.no_grad():
-    #         # get activations from feature extraction network
-    #         input = self.fixed_batch[VAL].images[img_id:img_id+1]
-    #         recon = self.saae.P(self.saae.Q(input))
-    #         feats_input = self.fe(input)
-    #         feats_recon = self.fe(recon)
-    #         loss_F = ((feats_input - feats_recon)**2).mean() * 500.0
-    #
-    #         # plot results
-    #         img_feats_input = vis.make_grid(to_numpy(feats_input[0, :25]), nCols=5)
-    #         img_feats_recon = vis.make_grid(to_numpy(feats_recon[0, :25]), nCols=5)
-    #         input = nn.denormalized(input)
-    #         recon = nn.denormalized(recon)
-    #         recon = recon.clamp(min=0, max=1)
-    #         img_input = to_numpy(input[0].permute(1, 2, 0))
-    #         img_recon = to_numpy(recon[0].permute(1, 2, 0))
-    #         fig, axes = plt.subplots(2,2, figsize=(12,10))
-    #         axes[0, 0].imshow(img_input)
-    #         axes[0, 1].imshow(img_recon)
-    #         axes[1, 0].imshow(img_feats_input)
-    #         axes[1, 1].imshow(img_feats_recon)
-    #         fig.suptitle("{:.4f}".format(loss_F))
-    #         # plt.show()
-    #         img_filepath =  os.path.join(out_dir, 'train', 'ft_train_{}.png'.format(self.epoch+1))
-    #         io_utils.makedirs(img_filepath)
-    #         try:
-    #             plt.savefig(img_filepath, bbox_inches='tight', pad_inches=0)
-    #         except SystemError:  # disable output when exiting program with Ctrl-C (hacky)
-    #             pass
 
     def reconstruct_fixed_samples(self):
         out_dir = os.path.join(cfg.REPORT_DIR, 'reconstructions', self.session_name)
         # reconstruct some fixed images from training and validation set (if available)
         for phase, b in self.fixed_batch.items():
-            b = self.fixed_batch[TRAIN]
+            b = self.fixed_batch[phase]
             f = 1 if  b.images.shape[-1] < 512 else 0.5
             img = vis_reconstruction(self.saae,
                                      b.images,
@@ -575,7 +531,7 @@ def add_arguments(parser, defaults=None):
     parser.add_argument('--train-count-multi', default=None, type=int,
                         help='number of total training images for training using multiple datasets')
     parser.add_argument('--st', default=None, type=int, help='skip first n training images')
-    parser.add_argument('--val-count',  default=200, type=int, help='number of test images')
+    parser.add_argument('--val-count',  default=None, type=int, help='number of test images')
     parser.add_argument('--daug', type=int, default=0, help='level of data augmentation for training')
     parser.add_argument('--align', type=bool_str, default=False, help='rotate crop so eyes are horizontal')
     parser.add_argument('--occ', type=bool_str, default=False, help='add occlusions to target images')
