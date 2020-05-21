@@ -102,8 +102,8 @@ class AAE(nn.Module):
         return [to_numpy(self.z)]
 
     def forward(self, X):
-        self.z = self.E(X)
-        outputs = self.G(self.z)
+        self.z = self.Q(X)
+        outputs = self.P(self.z)
         self.landmark_heatmaps = None
         if outputs.shape[1] > 3:
             self.landmark_heatmaps = outputs[:,3:]
