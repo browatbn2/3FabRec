@@ -6,7 +6,6 @@ import torch.utils.data as td
 import pandas as pd
 import numpy as np
 import datetime
-import neptune
 
 from csl_common.utils import log
 from csl_common.utils.nn import Batch
@@ -269,7 +268,6 @@ class AAEUnsupervisedTraining(AAETraining):
             loss_recon = aae_training.loss_recon(X_target, X_recon)
             loss = loss_recon * self.args.w_rec #+ loss_z * 0.1
             iter_stats['loss_recon'] = loss_recon.item()
-            # neptune.log_metric('loss_recon', self.total_iter, loss_recon.item())
 
             # if eval and batch.landmarks is not None:
             #     iter_stats['landmark_ssim_scores'] = lmutils.calc_landmark_ssim_score(X_target, X_recon, batch.landmarks).mean()
@@ -301,7 +299,6 @@ class AAEUnsupervisedTraining(AAETraining):
                 iter_stats.update(gan_stats)
 
             iter_stats['loss'] = loss.item()
-            # neptune.log_metric('loss', self.total_iter, loss.item())
 
             if self.args.train_decoder:
                 loss.backward()
