@@ -368,6 +368,38 @@ class RandomHorizontalFlip(object):
         3:4,
     }
 
+    lm_left_to_right_38 = {
+        # eye brows
+        0: 5,
+        1: 4,
+        2: 3,
+
+        # eyes
+        12: 24,
+        13: 23,
+        14: 22,
+        15: 21,
+        16: 20,
+        17: 27,
+        18: 26,
+        19: 25,
+
+        # nose
+        6: 6,
+        7: 7,
+        8: 8,
+        9: 11,
+        10: 10,
+
+        # mouth
+        28: 34,
+        29: 33,
+        30: 32,
+        31: 31,
+        36: 36,
+        37: 37
+    }
+
     # DeepFashion full body fashion landmarks
     lm_left_to_right_8 = {
         0:1,
@@ -417,6 +449,8 @@ class RandomHorizontalFlip(object):
                     lm_flip_map = self.lm_flip_map_98
                 elif len(landmarks) == 8:
                     lm_flip_map = self.lm_flip_map_8
+                elif len(landmarks) == 38:
+                    lm_flip_map = self.lm_flip_map_38
                 else:
                     raise ValueError('Invalid landmark format.')
                 for i in range(len(landmarks)):

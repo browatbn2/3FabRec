@@ -257,15 +257,14 @@ def calc_landmark_nme(gt_lms, pred_lms, ocular_norm='pupil', image_size=None):
     pred = reformat(pred_lms)
     assert(len(gt.shape) == 3)
     assert(len(pred.shape) == 3)
-    if gt.shape[1] == 5:
+    if gt.shape[1] == 5:  # VGGFace2
        ocular_dists = np.sqrt(np.sum((gt[:, 1] - gt[:, 0])**2, axis=1))
-    elif gt.shape[1] == 19:
+    elif gt.shape[1] == 19:  # AFLW
         assert image_size is not None
-        # ocular_dists = np.ones(gt.shape[0], dtype=np.float32) * cfg.INPUT_SIZE / 1.13
-        ocular_dists = np.ones(gt.shape[0], dtype=np.float32) * image_size  # FIXME 1.13 for AFLW?
-    elif gt.shape[1] == 98:
+        ocular_dists = np.ones(gt.shape[0], dtype=np.float32) * image_size
+    elif gt.shape[1] == 98:  # WFLW
         ocular_dists = np.sqrt(np.sum((gt[:, 72] - gt[:, 60])**2, axis=1))
-    else:
+    elif gt.shape[1] == 68:  # 300-W
         if ocular_norm == 'pupil':
             ocular_dists = get_pupil_dists(gt)
         elif ocular_norm == 'outer':
@@ -274,6 +273,9 @@ def calc_landmark_nme(gt_lms, pred_lms, ocular_norm='pupil', image_size=None):
             ocular_dists = np.ones((len(gt),1)) * 100.0
         else:
             raise ValueError("Ocular norm {} not defined!".format(ocular_norm))
+    else:
+        assert image_size is not None
+        ocular_dists = np.ones(gt.shape[0], dtype=np.float32) * image_size
     norm_dists = np.sqrt(np.sum((gt - pred)**2, axis=2)) / ocular_dists.reshape(len(gt), 1)
     return norm_dists * 100
 
