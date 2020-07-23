@@ -424,6 +424,7 @@ class RandomHorizontalFlip(object):
         self.lm_flip_map_19 = build_landmark_flip_map(self.lm_left_to_right_19)
         self.lm_flip_map_5 = build_landmark_flip_map(self.lm_left_to_right_5)
         self.lm_flip_map_8 = build_landmark_flip_map(self.lm_left_to_right_8)
+        self.lm_flip_map_38 = build_landmark_flip_map(self.lm_left_to_right_38)
 
 
     def __call__(self, sample):
