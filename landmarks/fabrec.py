@@ -59,14 +59,10 @@ class Fabrec(aae.AAE):
         if hms.shape[1] > 3:
             # print(hms.max())
             for i in range(len(hms)):
-                if hms.shape[1] not in [19, 68, 98]:
-                    _, lm_coords = landmarks.lmutils.decode_heatmaps(to_numpy(hms[i]))
-                    lms[i] = lm_coords
-                else:
-                    heatmaps = to_numpy(hms[i])
-                    for l in range(len(heatmaps)):
-                        hm = heatmaps[self.landmark_id_to_heatmap_id(l)]
-                        lms[i, l, :] = np.unravel_index(np.argmax(hm, axis=None), hm.shape)[::-1]
+                heatmaps = to_numpy(hms[i])
+                for l in range(len(heatmaps)):
+                    hm = heatmaps[self.landmark_id_to_heatmap_id(l)]
+                    lms[i, l, :] = np.unravel_index(np.argmax(hm, axis=None), hm.shape)[::-1]
         elif hms.shape[1] == 3:
             hms = to_numpy(hms)
             def get_score_plane(h, lm_id, cn):
