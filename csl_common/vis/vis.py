@@ -271,7 +271,7 @@ def add_landmarks_to_images(images, landmarks, color=None, radius=2, gt_landmark
             draw_offset_lines(new_images[img_id], landmarks[img_id], gt_landmarks[img_id], dists)
 
     for img_id, (disp, lm)  in enumerate(zip(new_images, landmarks)):
-        if len(lm) in [68, 21, 19, 98, 8, 5]:
+        if len(lm) in [68, 21, 19, 98, 8, 5, 38]:
             if draw_dots:
                 for lm_id in range(0,len(lm)):
                     if landmarks_to_draw is None or lm_id in landmarks_to_draw or len(lm) != 68:
