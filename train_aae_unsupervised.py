@@ -259,7 +259,7 @@ class AAEUnsupervisedTraining(AAETraining):
         with torch.set_grad_enabled(self.args.train_decoder):
 
             # reconstruct images
-            self.saae.P.zero_grad()
+            self.saae.E.zero_grad()
             X_recon = self.saae.P(z_sample)
 
             #######################
