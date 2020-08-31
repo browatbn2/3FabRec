@@ -259,22 +259,15 @@ class AAEUnsupervisedTraining(AAETraining):
         with torch.set_grad_enabled(self.args.train_decoder):
 
             # reconstruct images
-            self.saae.E.zero_grad()
+            self.saae.Q.zero_grad()
             X_recon = self.saae.P(z_sample)
 
             #######################
             # Reconstruction loss
             #######################
             loss_recon = aae_training.loss_recon(X_target, X_recon)
-            loss = loss_recon * self.args.w_rec #+ loss_z * 0.1
+            loss = loss_recon * self.args.w_rec 
             iter_stats['loss_recon'] = loss_recon.item()
-
-            # if eval and batch.landmarks is not None:
-            #     iter_stats['landmark_ssim_scores'] = lmutils.calc_landmark_ssim_score(X_target, X_recon, batch.landmarks).mean()
-            #     iter_stats['landmark_recon_errors'] = lmutils.calc_landmark_recon_error(X_target, X_recon, batch.landmarks).mean()
-            #     iter_stats['landmark_ncc_errors'] = lmutils.calc_landmark_ncc(X_target, X_recon, batch.landmarks).mean()
-            #     iter_stats['landmark_cs_errors'] = lmutils.calc_landmark_cs_error(X_target, X_recon, batch.landmarks,
-            #                                                                       torch_ssim=self.ssim).mean()
 
             #######################
             # Structural loss
