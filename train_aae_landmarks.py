@@ -11,6 +11,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 import config as cfg
+import csl_common.utils.ds_utils as ds_utils
 from datasets import wflw, w300, aflw
 from constants import TRAIN, VAL
 from csl_common.utils import log
@@ -326,6 +327,7 @@ def run():
                                            (args.train_count, args.val_count)):
         train = phase == TRAIN
         name = dsnames[0]
+        transform = ds_utils.build_transform(deterministic=not train, daug=args.daug)
         root, cache_root = cfg.get_dataset_paths(name)
         dataset_cls = cfg.get_dataset_class(name)
         datasets[phase] = dataset_cls(root=root,
@@ -340,7 +342,7 @@ def run():
                                       return_landmark_heatmaps=lmcfg.PREDICT_HEATMAP,
                                       with_occlusions=args.occ and train,
                                       landmark_sigma=args.sigma,
-                                      daug=args.daug,
+                                      transform=transform,
                                       image_size=args.input_size)
         print(datasets[phase])
 
