@@ -66,7 +66,7 @@ def test_crop(net, input_image, gt_landmarks, bb_for_crop=None, lms_for_crop=Non
 
 if __name__ == '__main__':
 
-    model = './data/models/snapshots/lms_wflw'
+    model = './data/models/snapshots/demo'
     net = fabrec.load_net(model, num_landmarks=98)
     net.eval()
 

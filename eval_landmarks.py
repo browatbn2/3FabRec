@@ -16,13 +16,13 @@ class FabrecEval(AAELandmarkTraining):
         self.all_landmarks = ds.ALL_LANDMARKS
         self.landmarks_no_outline = ds.LANDMARKS_NO_OUTLINE
         self.landmarks_only_outline = ds.LANDMARKS_ONLY_OUTLINE
-        AAETraining.__init__(self,datasets, args, session_name, **kwargs)
+        AAETraining.__init__(self, datasets, args, session_name, **kwargs)
 
 
 def run(args):
 
     if args.seed is not None:
-        from utils.common import init_random
+        from csl_common.utils.common import init_random
         init_random(args.seed)
     # log.info(json.dumps(vars(args), indent=4))
 
@@ -60,11 +60,8 @@ if __name__ == '__main__':
     import numpy as np
     np.set_printoptions(linewidth=np.inf)
 
-
     parser = configargparse.ArgParser()
     aae_training.add_arguments(parser)
-
-    # parser.add_argument('-c', '--conf', required=False, is_config_file=True, help='config file path')
 
     # Dataset
     parser.add_argument('--dataset', default=['w300'], type=str, choices=cfg.get_registered_dataset_names(),
@@ -80,6 +77,9 @@ if __name__ == '__main__':
                         help='how to normalize landmark errors', choices=['pupil', 'outer', 'none'])
 
     args = parser.parse_args()
+
+    if args.resume is None:
+        raise ValueError("Please specify the model to be evaluated: '-r MODELNAME'")
 
     args.dataset_train = args.dataset
     args.dataset_val = args.dataset
@@ -101,12 +101,6 @@ if __name__ == '__main__':
         args.val_count = None
 
     if args.sessionname is None:
-        if args.resume:
-            import os
-            modelname = os.path.split(args.resume)[0]
-            args.sessionname = modelname
-        else:
-            args.sessionname = 'debug'
-    # print(args)
-    # exit()
+        args.sessionname = args.resume
+
     run(args)

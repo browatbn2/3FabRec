@@ -79,8 +79,6 @@ class AAELandmarkTraining(AAETraining):
                 import matplotlib.pyplot as plt
                 fig, axes = plt.subplots(1,2)
                 axes[0].plot(X, Y)
-                print(nmes.mean(axis=1).shape)
-                print(nmes.mean(axis=1).max())
                 axes[1].hist(nmes.mean(axis=1), bins=20)
                 plt.show()
 
@@ -161,8 +159,9 @@ class AAELandmarkTraining(AAETraining):
             pass
 
         if self.args.eval and nmes is not None:
-            benchmark_mode = hasattr(self.args, 'benchmark')
-            self.print_eval_metrics(nmes, show=benchmark_mode)
+            # benchmark_mode = hasattr(self.args, 'benchmark')
+            # self.print_eval_metrics(nmes, show=benchmark_mode)
+            self.print_eval_metrics(nmes, show=False)
 
 
     def eval_epoch(self):
