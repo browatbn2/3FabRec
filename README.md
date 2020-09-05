@@ -246,7 +246,7 @@ The second figure shows ground truth heatmaps and predicted heatmaps for the sam
 
 ### Benchmark performance
 
-To evaluate performance on the entire test set, switch to benchmark mode: --benchmark`. To run on a specific subset use param `--test-split SPLITNAME`.
+To evaluate performance on the entire test set, switch to benchmark mode: `--benchmark`. To run on a specific subset use param `--test-split SPLITNAME`.
 
 ```
 python eval_landmarks.py -r lms_wflw --dataset wflw --test-split make-up --benchmark
