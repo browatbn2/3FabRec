@@ -199,12 +199,12 @@ python train_aae_landmarks.py --sessionname lms_300w -r my_model/00003 --dataset
 python train_aae_landmarks.py --sessionname lms_300w -r my_model/00003 --dataset w300  --train-encoder 1
 ```
 
-### Training landmark detection (few show)
+### Training landmark detection (few shot)
 
 Train using 50 images from 300-W:
 
 ```
-python train_aae_landmarks.py --sessionname lms_300w_50 -r my_model/00003 --dataset w300 --train-count 50 
+python train_aae_landmarks.py --sessionname lms_300w_50 -r my_model/00003 --dataset w300 --train-count 50 --print-freq 1
 ```
 
 Please note: For very low image counts (<50), encoder finetuning only leads to small performance gains and might even result in overfitting (worse performace).
@@ -249,7 +249,7 @@ The second figure shows ground truth heatmaps and predicted heatmaps for the sam
 To evaluate performance on the entire test set, switch to benchmark mode: --benchmark`. To run on a specific subset use param `--test-split SPLITNAME`.
 
 ```
-python eval_aae_landmarks.py -r lms_wflw --dataset wflw --test-split make-up --benchmark
+python eval_landmarks.py -r lms_wflw --dataset wflw --test-split make-up --benchmark
 ```
 
 
