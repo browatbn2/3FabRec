@@ -284,28 +284,24 @@ class AAETraining(object):
             D_fake = self.saae.D_z(z_sample)
             loss_E = -torch.mean(torch.log(D_fake + eps))
             loss_E.backward(retain_graph=True)
-            self.optimizer_E.step()
             stats['loss_E'] = loss_E.item()
-
         return stats
 
     def update_gan(self, X_target, X_recon, z_sample, train=True, with_gen_loss=False, w_gen=0.25, X_gen=None):
         stats = {}
-        # y_ones = torch.FloatTensor(len(X_target)).fill_(1).cuda()
         if with_gen_loss:
-            # Generate some random images
+            # Generate images by interpolating between reals
             # z_noise = self.enc_rand(len(z_sample), z_sample.shape[1]).to(device)
             # dist = np.random.random(1)[0]
             # z_random = z_sample + (z_noise - z_sample) * dist
             # X_gen = self.saae.P(z_random)[:, :3]
-
             # z_sample = z_sample.detach()
             # z_noise = self.enc_rand(len(z_sample), z_sample.shape[1]).to(device)
+            # Generate some random images
             rand_ids = sklearn.utils.shuffle(range(len(z_sample)))
             z_noise = z_sample[rand_ids]
             gamma = 1.0
             dist = torch.rand((len(z_sample),1)).cuda() ** gamma
-            # dist = 0
             z_random = z_sample + (z_noise - z_sample) * dist
             X_gen = self.saae.P(z_random)[:, :3]
 
