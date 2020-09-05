@@ -107,7 +107,7 @@ class AFLW(facedataset.FaceDataset):
 
 if __name__ == '__main__':
 
-    from utils.nn import Batch, denormalize
+    from csl_common.utils.nn import Batch, denormalize
     import utils.common
 
     utils.common.init_random()
