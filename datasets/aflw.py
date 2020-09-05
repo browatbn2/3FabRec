@@ -98,12 +98,15 @@ class AFLW(facedataset.FaceDataset):
     def __getitem__(self, idx):
         sample = self.annotations.iloc[idx]
         face_id = sample.ra
-        bb = [sample.face_x, sample.face_y, sample.face_x+sample.face_w, sample.y+sample.face_h]
+        bb = [sample.face_x, sample.face_y, sample.face_x+sample.face_w, sample.face_y+sample.face_h]
         landmarks = sample.landmarks_full.astype(np.float32)
         landmarks_for_crop = landmarks if self.crop_source == 'lm_ground_truth' else None
         return self.get_sample(sample.fname, bb, landmarks_for_crop=landmarks_for_crop,  id=face_id,
                                landmarks_to_return=landmarks)
 
+
+import config
+config.register_dataset(AFLW)
 
 if __name__ == '__main__':
 
