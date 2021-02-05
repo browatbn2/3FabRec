@@ -42,7 +42,9 @@ class Logger(logging.Logger):
         from os import makedirs as mkdirs
         import datetime
         from os.path import expanduser
-        hostname = os.uname()[1]
+        import platform
+        # hostname = os.uname()[1]
+        hostname = platform.uname().node
         log_dir = os.path.join(expanduser("~"), '.devlogs')
         mkdirs(log_dir, exist_ok=True)
         filename = os.path.join(log_dir, '{}_{}.log'.format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'), hostname))

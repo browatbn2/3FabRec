@@ -1,3 +1,4 @@
+from constants import TRAIN, VAL
 import time
 import datetime
 import os
@@ -13,7 +14,6 @@ import torch.nn.functional as F
 import config as cfg
 import csl_common.utils.ds_utils as ds_utils
 from datasets import wflw, w300, aflw
-from constants import TRAIN, VAL
 from csl_common.utils import log
 from csl_common.utils.nn import to_numpy, Batch
 from train_aae_unsupervised import AAETraining
