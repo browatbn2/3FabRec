@@ -39,7 +39,7 @@ class AFLW(facedataset.FaceDataset):
         return self.annotations.face_w.values
 
     def _load_annotations(self, split):
-        annotation_filename = os.path.join(self.cache_root, 'alfw.pkl')
+        annotation_filename = os.path.join(config.DATA_DIR, 'aflw.pkl')
         self.annotations_original = pd.read_pickle(annotation_filename)
         print("Number of images: {}".format(len(self.annotations_original)))
         self.frontal_only = split == 'frontal'
