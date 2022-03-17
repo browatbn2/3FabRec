@@ -217,7 +217,7 @@ Please note: For very low image counts (<50), encoder finetuning only leads to s
 To visualize some detections on WFLW for example:
 
 ```
-python eval_aae_landmarks.py -r lms_wflw --dataset wflw
+python eval_landmarks.py -r lms_wflw --dataset wflw
 ```
 ```
 ...
