@@ -24,6 +24,6 @@ unzip tmp.zip -d lms_300w
 rm tmp.zip
 
 # Landmarks trained on AFLW
-https://www.dropbox.com/sh/ayhghbeqcj3qbb2/AAAP6Jy2FEZv_rhq5T3zxnOza
+wget -O tmp.zip https://www.dropbox.com/sh/ayhghbeqcj3qbb2/AAAP6Jy2FEZv_rhq5T3zxnOza
 unzip tmp.zip -d lms_aflw
 rm tmp.zip
